@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   BarChart3,
   BookOpen,
@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Download,
+  FileUp,
   FolderKanban,
   Globe,
   GraduationCap,
@@ -29,6 +30,7 @@ import type {
   DivisionId,
   PlatformState,
   ResourceItem,
+  ResourceAttachment,
   Submission,
   UserAccount,
 } from '../../types/kwan';
@@ -79,6 +81,26 @@ const BLOG_CATEGORIES: BlogCategory[] = [
   'Learning Resources',
 ];
 
+const RESOURCE_FILE_ACCEPT = '.csv,.doc,.docx,.jpeg,.jpg,.odt,.odp,.ods,.pdf,.png,.ppt,.pptx,.rtf,.txt,.xls,.xlsx';
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Unable to read the selected file.'));
+    };
+    reader.onerror = () => reject(new Error('Unable to read the selected file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatFileSize(sizeBytes: number): string {
+  return sizeBytes >= 1024 * 1024
+    ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
+}
+
 interface AdminDashboardProps {
   state: PlatformState;
   user: UserAccount;
@@ -126,10 +148,27 @@ export function AdminDashboard({
 
   // Resource Builder State
   const [resTitle, setResTitle] = useState('');
+  const [resDescription, setResDescription] = useState('');
+  const [resPreviewContent, setResPreviewContent] = useState('');
+  const [resCategory, setResCategory] = useState('General');
+  const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [resDivision, setResDivision] = useState<DivisionId>('lower_secondary');
   const [resAccess, setResAccess] = useState<'free' | 'paid'>('free');
   const [resPrice, setResPrice] = useState(15000);
   const [resFormat, setResFormat] = useState<ResourceItem['format']>('PDF Notes');
+  const [resFile, setResFile] = useState<File | null>(null);
+  const [resCurrentAttachment, setResCurrentAttachment] = useState<ResourceAttachment | undefined>();
+  const [removeResAttachment, setRemoveResAttachment] = useState(false);
+  const [resError, setResError] = useState('');
+  const [savingResource, setSavingResource] = useState(false);
+  const resourceFileInput = useRef<HTMLInputElement>(null);
+
+  const [newTutorName, setNewTutorName] = useState('');
+  const [newTutorEmail, setNewTutorEmail] = useState('');
+  const [newTutorPassword, setNewTutorPassword] = useState('');
+  const [newTutorError, setNewTutorError] = useState('');
+  const [newTutorNotice, setNewTutorNotice] = useState('');
+  const [creatingTutor, setCreatingTutor] = useState(false);
 
   // Settings State
   const [settingsDraft, setSettingsDraft] = useState(state.settings);
@@ -168,6 +207,92 @@ export function AdminDashboard({
     setCourseSummary('');
     setCourseNotice('Course created and target class permissions activated.');
     setTimeout(() => setCourseNotice(''), 3500);
+  };
+
+  const handleCreateTutor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewTutorError('');
+    if (newTutorPassword.length < 12) {
+      setNewTutorError('Use a temporary password with at least 12 characters.');
+      return;
+    }
+    setCreatingTutor(true);
+    try {
+      const result = await api.createTutor({
+        name: newTutorName.trim(),
+        email: newTutorEmail.trim(),
+        password: newTutorPassword,
+      });
+      onStateChange(result.state);
+      setNewTutorName('');
+      setNewTutorEmail('');
+      setNewTutorPassword('');
+      setNewTutorNotice(
+        result.user.approved
+          ? 'Tutor account created and approved.'
+          : 'Tutor account created. Approve it before the tutor can sign in.'
+      );
+      window.setTimeout(() => setNewTutorNotice(''), 4000);
+    } catch (err) {
+      setNewTutorError(err instanceof Error ? err.message : 'Unable to create the tutor account.');
+    } finally {
+      setCreatingTutor(false);
+    }
+  };
+
+  const resetResourceForm = () => {
+    setEditingResourceId(null);
+    setResTitle('');
+    setResDescription('');
+    setResPreviewContent('');
+    setResCategory('General');
+    setResFile(null);
+    setResCurrentAttachment(undefined);
+    setRemoveResAttachment(false);
+    setResError('');
+    if (resourceFileInput.current) resourceFileInput.current.value = '';
+  };
+
+  const handleSaveResource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resTitle.trim()) return;
+    setResError('');
+    setSavingResource(true);
+    try {
+      const attachmentFields = resFile
+        ? {
+            attachmentDataUrl: await readFileAsDataUrl(resFile),
+            attachmentFileName: resFile.name,
+          }
+        : editingResourceId && removeResAttachment
+        ? { removeAttachment: true }
+        : {};
+      const payload = {
+        title: resTitle.trim(),
+        division: resDivision,
+        targetClasses: DIVISION_META[resDivision].classes,
+        accessType: resAccess,
+        priceUGX: resAccess === 'paid' ? resPrice : 0,
+        format: resFormat,
+        category: resCategory.trim() || 'General',
+        description: resDescription.trim(),
+        previewContent: resPreviewContent.trim(),
+        approved: editingResourceId
+          ? state.resources.find((resource) => resource.id === editingResourceId)?.approved ?? true
+          : true,
+        authorName: user.name,
+        ...attachmentFields,
+      };
+      const result = editingResourceId
+        ? await api.updateResource(editingResourceId, payload)
+        : await api.createResource(payload);
+      onStateChange(result.state);
+      resetResourceForm();
+    } catch (err) {
+      setResError(err instanceof Error ? err.message : 'Unable to save the resource.');
+    } finally {
+      setSavingResource(false);
+    }
   };
 
   const handleSaveBlog = async (e: React.FormEvent) => {
@@ -221,18 +346,16 @@ export function AdminDashboard({
   };
 
   return (
-    <div className="min-h-screen bg-glass-canvas text-slate-900 flex">
+    <div className="min-h-screen bg-animated-canvas text-slate-900 flex">
       {/* Admin Left Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white/75 backdrop-blur-2xl text-slate-900 flex flex-col border-r border-white/85 shadow-glass transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white text-slate-900 flex flex-col border-r border-slate-200 shadow-soft transition-transform lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="px-5 py-4 border-b border-slate-200/70 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-lg bg-gradient-sunrise text-[#1b1104] font-bold text-sm flex items-center justify-center shadow-sm">
-              K
-            </span>
+            <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-9 h-9 rounded-xl shadow-sm" />
             <div>
               <p className="text-base font-bold text-slate-950 tracking-tight">KWAN Admin</p>
               <p className="text-[11px] text-slate-600">Central Governance</p>
@@ -261,8 +384,8 @@ export function AdminDashboard({
                 }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
                   active
-                    ? 'bg-slate-900 text-white shadow-soft'
-                    : 'text-slate-700 hover:bg-white/80 hover:text-slate-950'
+                    ? 'bg-[#E6F2F2] text-[#0F4C81] shadow-sm'
+                    : 'text-slate-700 hover:bg-[#F4F7F6] hover:text-[#0F4C81]'
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -302,29 +425,29 @@ export function AdminDashboard({
 
       {/* Main Content Viewport */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="glass-header-footer border-b border-sky-200/70 px-6 py-3.5 flex items-center justify-between gap-4 sticky top-0 z-30">
+        <header className="glass-header-footer border-b border-[#1D5E96] px-6 py-3.5 flex items-center justify-between gap-4 sticky top-0 z-30 text-white">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 text-slate-800 bg-white/75 border border-sky-200/80 rounded-lg"
+              className="lg:hidden p-2 text-white bg-white/10 border border-white/30 rounded-lg"
             >
               <Menu className="w-4 h-4" />
             </button>
             <div>
-              <p className="text-xs text-slate-700">KWAN Administration / {ADMIN_NAV.find((n) => n.id === area)?.label}</p>
-              <h1 className="text-base font-bold text-slate-950">
+              <p className="text-xs text-[#E2E8F0]">KWAN Administration / {ADMIN_NAV.find((n) => n.id === area)?.label}</p>
+              <h1 className="text-base font-bold text-white">
                 {ADMIN_NAV.find((n) => n.id === area)?.label}
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline text-xs font-medium text-slate-800">{user.name}</span>
+            <span className="hidden sm:inline text-xs font-medium text-[#E2E8F0]">{user.name}</span>
             <button
               type="button"
               onClick={onLogout}
-              className="px-3.5 py-2 text-xs font-semibold text-slate-900 bg-white/75 border border-sky-200/80 rounded-lg hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
+              className="px-3.5 py-2 text-xs font-semibold text-white bg-white/10 border border-white/30 rounded-lg hover:bg-white/20 flex items-center gap-1.5 whitespace-nowrap"
             >
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </button>
@@ -810,7 +933,61 @@ export function AdminDashboard({
 
           {/* 7. TUTOR MANAGEMENT */}
           {area === 'tutors' && (
-            <div className="glass-card rounded-xl overflow-hidden">
+            <div className="space-y-4">
+              <form onSubmit={handleCreateTutor} className="glass-card rounded-xl p-5 space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Add a tutor</h2>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Tutor accounts can only be created here by an authenticated administrator. The tutor must use the temporary password you set.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Full name
+                    <input
+                      type="text"
+                      required
+                      value={newTutorName}
+                      onChange={(e) => setNewTutorName(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-700">
+                    Email address
+                    <input
+                      type="email"
+                      required
+                      value={newTutorEmail}
+                      onChange={(e) => setNewTutorEmail(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-700">
+                    Temporary password (12+ characters)
+                    <input
+                      type="password"
+                      required
+                      minLength={12}
+                      autoComplete="new-password"
+                      value={newTutorPassword}
+                      onChange={(e) => setNewTutorPassword(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal"
+                    />
+                  </label>
+                </div>
+                {newTutorError && <p role="alert" className="text-xs font-medium text-red-700">{newTutorError}</p>}
+                {newTutorNotice && <p role="status" className="text-xs font-medium text-emerald-700">{newTutorNotice}</p>}
+                <button
+                  type="submit"
+                  disabled={creatingTutor}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#10B981] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#059669] disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  {creatingTutor ? 'Creating tutor…' : 'Create tutor account'}
+                </button>
+              </form>
+
+              <div className="glass-card rounded-xl overflow-hidden">
               <table className="w-full text-left text-xs">
                 <thead className="bg-white/50 border-b border-slate-200/80 text-slate-600">
                   <tr>
@@ -856,6 +1033,7 @@ export function AdminDashboard({
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -982,31 +1160,79 @@ export function AdminDashboard({
           {area === 'resources' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!resTitle.trim()) return;
-                  const res = await api.createResource({
-                    title: resTitle.trim(),
-                    division: resDivision,
-                    targetClasses: DIVISION_META[resDivision].classes,
-                    accessType: resAccess,
-                    priceUGX: resAccess === 'paid' ? resPrice : 0,
-                    format: resFormat,
-                    approved: true,
-                    authorName: user.name,
-                  });
-                  onStateChange(res.state);
-                  setResTitle('');
-                }}
+                onSubmit={handleSaveResource}
                 className="lg:col-span-4 glass-card rounded-xl p-5 space-y-3"
               >
-                <h2 className="text-sm font-bold text-slate-900">Add Approved Resource</h2>
+                <h2 className="text-sm font-bold text-slate-900">{editingResourceId ? 'Edit Resource' : 'Add Approved Resource'}</h2>
                 <input
                   type="text"
                   required
                   value={resTitle}
                   onChange={(e) => setResTitle(e.target.value)}
                   placeholder="Resource title"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white/80"
+                />
+                <textarea
+                  rows={2}
+                  value={resDescription}
+                  onChange={(e) => setResDescription(e.target.value)}
+                  placeholder="Short description shown in resource listings"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white/80"
+                />
+                <textarea
+                  rows={4}
+                  value={resPreviewContent}
+                  onChange={(e) => setResPreviewContent(e.target.value)}
+                  placeholder="Resource preview content learners can read"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white/80"
+                />
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-3">
+                  <label htmlFor="resource-attachment" className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                    <FileUp className="h-4 w-4 text-[#0F4C81]" />
+                    Upload a resource file
+                  </label>
+                  <input
+                    ref={resourceFileInput}
+                    id="resource-attachment"
+                    type="file"
+                    accept={RESOURCE_FILE_ACCEPT}
+                    onChange={(e) => {
+                      setResFile(e.target.files?.[0] || null);
+                      setRemoveResAttachment(false);
+                      setResError('');
+                    }}
+                    className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-[#E6F2F2] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#0F4C81] hover:file:bg-[#d8ebeb]"
+                  />
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                    PDF, Word, PowerPoint, Excel, OpenDocument, CSV, RTF, TXT, PNG or JPG · max 20 MB.
+                  </p>
+                  {resFile && (
+                    <p className="mt-2 truncate text-[11px] font-medium text-[#0F4C81]">
+                      Selected: {resFile.name} ({formatFileSize(resFile.size)})
+                      {resCurrentAttachment ? ' · replaces current file on save' : ''}
+                    </p>
+                  )}
+                  {!resFile && resCurrentAttachment && !removeResAttachment && (
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+                      <span className="truncate text-slate-600">Attached: {resCurrentAttachment.fileName}</span>
+                      <button
+                        type="button"
+                        onClick={() => setRemoveResAttachment(true)}
+                        className="shrink-0 font-semibold text-red-700 hover:underline"
+                      >
+                        Remove file
+                      </button>
+                    </div>
+                  )}
+                  {removeResAttachment && (
+                    <p className="mt-2 text-[11px] font-medium text-amber-800">The attached file will be removed when saved.</p>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={resCategory}
+                  onChange={(e) => setResCategory(e.target.value)}
+                  placeholder="Category (e.g. Mathematics)"
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white/80"
                 />
                 <select
@@ -1048,12 +1274,23 @@ export function AdminDashboard({
                     className="w-full px-3 py-2 text-xs font-mono-tabular border border-slate-300 rounded-lg bg-white/80"
                   />
                 )}
+                {resError && <p role="alert" className="text-xs font-medium text-red-700">{resError}</p>}
                 <button
                   type="submit"
-                  className="w-full px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800"
+                  disabled={savingResource}
+                  className="w-full px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 disabled:opacity-50"
                 >
-                  Publish Resource
+                  {savingResource ? 'Saving resource…' : editingResourceId ? 'Save Resource Changes' : 'Publish Resource'}
                 </button>
+                {editingResourceId && (
+                  <button
+                    type="button"
+                    onClick={resetResourceForm}
+                    className="w-full px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+                  >
+                    Cancel Editing
+                  </button>
+                )}
               </form>
 
               <div className="lg:col-span-8 glass-card rounded-xl overflow-hidden">
@@ -1072,22 +1309,65 @@ export function AdminDashboard({
                         <td className="px-4 py-3">
                           <p className="font-semibold text-slate-900">{r.title}</p>
                           <p className="text-[11px] text-slate-500">{r.format} · {r.downloads} downloads</p>
+                          {r.attachment && (
+                            <p className="max-w-64 truncate text-[11px] text-[#0F4C81]" title={r.attachment.fileName}>
+                              {r.attachment.fileName} · {formatFileSize(r.attachment.sizeBytes)}
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3">{DIVISION_META[r.division].short}</td>
                         <td className="px-4 py-3 font-mono-tabular">{formatUGX(r.priceUGX)}</td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const res = await api.updateResource(r.id, { approved: !r.approved });
-                              onStateChange(res.state);
-                            }}
-                            className={`px-3 py-1 text-xs font-semibold rounded ${
-                              r.approved ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-100 text-amber-900'
-                            }`}
-                          >
-                            {r.approved ? 'Approved' : 'Approve Now'}
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingResourceId(r.id);
+                                setResTitle(r.title);
+                                setResDescription(r.description);
+                                setResPreviewContent(r.previewContent);
+                                setResCategory(r.category);
+                                setResDivision(r.division);
+                                setResAccess(r.accessType);
+                                setResPrice(r.priceUGX);
+                                setResFormat(r.format);
+                                setResFile(null);
+                                setResCurrentAttachment(r.attachment);
+                                setRemoveResAttachment(false);
+                                setResError('');
+                                if (resourceFileInput.current) resourceFileInput.current.value = '';
+                              }}
+                              className="text-[#0F4C81] font-semibold hover:underline"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`Delete "${r.title}"? This also removes learner access.`)) return;
+                                const res = await api.deleteResource(r.id);
+                                onStateChange(res.state);
+                                if (editingResourceId === r.id) {
+                                  resetResourceForm();
+                                }
+                              }}
+                              className="text-red-700 font-semibold hover:underline"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await api.updateResource(r.id, { approved: !r.approved });
+                                onStateChange(res.state);
+                              }}
+                              className={`px-3 py-1 text-xs font-semibold rounded ${
+                                r.approved ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-100 text-amber-900'
+                              }`}
+                            >
+                              {r.approved ? 'Approved' : 'Approve Now'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1177,7 +1457,7 @@ export function AdminDashboard({
                         <span className="font-mono-tabular">{formatUGX(sum)} ({pct}%)</span>
                       </div>
                       <div className="h-2 bg-slate-200/70 rounded-full overflow-hidden">
-                        <div className="h-full bg-[#f28c28] rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-[#10B981] rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -1295,8 +1575,8 @@ export function AdminDashboard({
           )}
         </main>
 
-        <footer className="glass-header-footer border-t border-sky-200/70 px-6 py-3 text-xs text-slate-800 flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold text-slate-950">KWAN Education Platform · Central Governance</span>
+        <footer className="bg-[#0F4C81] border-t border-[#1D5E96] px-6 py-3 text-xs text-[#E2E8F0] flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-white">KWAN Education Platform · Central Governance</span>
           <span>All curriculum, tutor &amp; financial controls active</span>
         </footer>
       </div>

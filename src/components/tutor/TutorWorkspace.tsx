@@ -22,23 +22,20 @@ export function TutorWorkspace({ state, user, onStateChange, onLogout }: TutorWo
   const relevantSubmissions = state.submissions.filter((s) => authorisedIds.has(s.courseId));
 
   return (
-    <div className="min-h-screen flex flex-col bg-glass-canvas bg-dots text-slate-900">
-      {/* Light-Blue Glassmorphism Header */}
-      <header className="glass-header-footer text-slate-900 border-b border-sky-200/80 px-6 py-4 sticky top-0 z-20">
+    <div className="min-h-screen flex flex-col bg-animated-canvas text-slate-900">
+      <header className="glass-header-footer text-white border-b border-[#1D5E96] px-6 py-4 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-200/90 border border-sky-300 text-slate-950 font-bold flex items-center justify-center shadow-sm">
-              K
-            </div>
+            <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-10 h-10 rounded-xl shadow-sm" />
             <div>
-              <p className="text-xs font-semibold text-amber-800">KWAN Faculty Portal</p>
-              <h1 className="text-lg font-bold text-slate-950">{user.name} — Tutor Workspace</h1>
+              <p className="text-xs font-semibold text-[#34D399]">KWAN Faculty Portal</p>
+              <h1 className="text-lg font-bold text-white">{user.name} — Tutor Workspace</h1>
             </div>
           </div>
           <button
             type="button"
             onClick={onLogout}
-            className="px-4 py-2 text-xs font-semibold text-slate-900 bg-white/75 border border-sky-300/80 rounded-lg hover:bg-white flex items-center gap-1.5"
+            className="px-4 py-2 text-xs font-semibold text-white bg-white/10 border border-white/30 rounded-lg hover:bg-white/20 flex items-center gap-1.5"
           >
             <LogOut className="w-3.5 h-3.5" /> Sign Out
           </button>
@@ -141,10 +138,9 @@ export function TutorWorkspace({ state, user, onStateChange, onLogout }: TutorWo
         )}
       </main>
 
-      {/* Light-Blue Glassmorphism Footer */}
-      <footer className="glass-header-footer border-t border-sky-200/80 px-6 py-5 text-xs text-slate-800">
+      <footer className="bg-[#0F4C81] border-t border-[#1D5E96] px-6 py-5 text-xs text-[#E2E8F0]">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold text-slate-950">KWAN Faculty Portal</span>
+          <span className="font-semibold text-white">KWAN Faculty Portal</span>
           <span>Red &amp; Green Pen Marking · Rubric Evaluation</span>
         </div>
       </footer>

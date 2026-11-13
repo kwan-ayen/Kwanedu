@@ -1,31 +1,45 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import type { DivisionId, PlatformState, PublicPageId, UserAccount } from './types/kwan';
 import { api } from './lib/api';
-import { PublicWebsite } from './components/public/PublicWebsite';
-import { PrimaryEnvironment } from './components/environments/PrimaryEnvironment';
-import { LowerSecondaryEnvironment } from './components/environments/LowerSecondaryEnvironment';
-import { UpperSecondaryEnvironment } from './components/environments/UpperSecondaryEnvironment';
-import { TutorWorkspace } from './components/tutor/TutorWorkspace';
-import { AdminDashboard } from './components/admin/AdminDashboard';
 
-const SESSION_KEY = 'kwan_session_user_id';
+const PublicWebsite = lazy(() => import('./components/public/PublicWebsite').then((module) => ({ default: module.PublicWebsite })));
+const PrimaryEnvironment = lazy(() =>
+  import('./components/environments/PrimaryEnvironment').then((module) => ({ default: module.PrimaryEnvironment }))
+);
+const LowerSecondaryEnvironment = lazy(() =>
+  import('./components/environments/LowerSecondaryEnvironment').then((module) => ({
+    default: module.LowerSecondaryEnvironment,
+  }))
+);
+const UpperSecondaryEnvironment = lazy(() =>
+  import('./components/environments/UpperSecondaryEnvironment').then((module) => ({
+    default: module.UpperSecondaryEnvironment,
+  }))
+);
+const TutorWorkspace = lazy(() =>
+  import('./components/tutor/TutorWorkspace').then((module) => ({ default: module.TutorWorkspace }))
+);
+const AdminDashboard = lazy(() =>
+  import('./components/admin/AdminDashboard').then((module) => ({ default: module.AdminDashboard }))
+);
 
-const VALID_PUBLIC_PAGES: PublicPageId[] = [
-  'home',
-  'about',
-  'blog',
-  'resources',
-  'get_started',
-  'login',
-];
+const SESSION_KEY = 'kwan_session_token';
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-700 text-sm font-medium">
+      Loading KWAN Education Platform...
+    </div>
+  );
+}
 
 function getInitialRouteFromUrl(): { page: PublicPageId; forcePublic: boolean } {
   const params = new URLSearchParams(window.location.search);
-  const rawPage = params.get('page') as PublicPageId | null;
+  const rawPage = params.get('page');
   const view = params.get('view');
-  const page = rawPage && VALID_PUBLIC_PAGES.includes(rawPage) ? rawPage : 'home';
-  const forcePublic = view === 'public' || Boolean(rawPage && VALID_PUBLIC_PAGES.includes(rawPage));
+  const page = rawPage && /^[a-z0-9-]+$/i.test(rawPage) ? rawPage : 'home';
+  const forcePublic = view === 'public' || Boolean(rawPage && page !== 'home');
   return { page, forcePublic };
 }
 
@@ -40,7 +54,8 @@ export default function App() {
   const [adminPreviewDivision, setAdminPreviewDivision] = useState<DivisionId | null>(null);
 
   const signOut = () => {
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('kwan_session_user_id');
     setCurrentUser(null);
     setShowPublicWhileSignedIn(false);
     setAdminPreviewDivision(null);
@@ -50,12 +65,15 @@ export default function App() {
   useEffect(() => {
     api
       .fetchState()
-      .then((data) => {
+      .then(async (data) => {
         setState(data);
-        const savedId = localStorage.getItem(SESSION_KEY);
-        if (savedId) {
-          const found = data.users.find((u) => u.id === savedId);
-          if (found) setCurrentUser(found);
+        if (sessionStorage.getItem(SESSION_KEY)) {
+          try {
+            const { user } = await api.currentUser();
+            setCurrentUser(user);
+          } catch {
+            sessionStorage.removeItem(SESSION_KEY);
+          }
         }
         setLoading(false);
       })
@@ -66,11 +84,7 @@ export default function App() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-700 text-sm font-medium">
-        Loading KWAN Education Platform...
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error || !state) {
@@ -113,6 +127,7 @@ export default function App() {
             <ArrowLeft className="w-3.5 h-3.5" /> Return to Admin Console
           </button>
         </div>
+        <Suspense fallback={<LoadingScreen />}>
         {adminPreviewDivision === 'primary' && (
           <PrimaryEnvironment
             state={state}
@@ -140,6 +155,7 @@ export default function App() {
             isAdminPreview
           />
         )}
+        </Suspense>
       </div>
     );
   }
@@ -149,18 +165,18 @@ export default function App() {
     if (currentUser.role === 'admin') {
       return (
         <div>
-          <AdminDashboard
-            state={state}
-            user={currentUser}
-            onStateChange={(next) => handleStateUpdate(next)}
-            onPreviewDivision={(div) => setAdminPreviewDivision(div)}
-            onLogout={signOut}
-          />
+          <Suspense fallback={<LoadingScreen />}>
+            <AdminDashboard
+              state={state}
+              user={currentUser}
+              onStateChange={(next) => handleStateUpdate(next)}
+              onPreviewDivision={(div) => setAdminPreviewDivision(div)}
+              onLogout={signOut}
+            />
+          </Suspense>
           <div className="fixed bottom-4 right-4 z-30">
             <a
               href="/?page=home&view=public"
-              target="_blank"
-              rel="noopener noreferrer"
               className="inline-block px-3.5 py-2 text-xs font-semibold bg-white text-slate-900 border border-slate-300 rounded-lg shadow-md hover:bg-slate-50"
             >
               View Live Website
@@ -172,12 +188,14 @@ export default function App() {
 
     if (currentUser.role === 'tutor') {
       return (
-        <TutorWorkspace
-          state={state}
-          user={currentUser}
-          onStateChange={(next) => handleStateUpdate(next)}
-          onLogout={signOut}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <TutorWorkspace
+            state={state}
+            user={currentUser}
+            onStateChange={(next) => handleStateUpdate(next)}
+            onLogout={signOut}
+          />
+        </Suspense>
       );
     }
 
@@ -185,8 +203,6 @@ export default function App() {
       <div className="fixed bottom-4 right-4 z-30">
         <a
           href="/?page=resources&view=public"
-          target="_blank"
-          rel="noopener noreferrer"
           className="inline-block px-3.5 py-2 text-xs font-semibold bg-white text-slate-900 border border-slate-300 rounded-lg shadow-md hover:bg-slate-50"
         >
           Browse KWAN Resources &amp; Blog
@@ -197,12 +213,14 @@ export default function App() {
     if (currentUser.division === 'primary') {
       return (
         <>
-          <PrimaryEnvironment
-            state={state}
-            user={currentUser}
-            onStateChange={handleStateUpdate}
-            onLogout={signOut}
-          />
+          <Suspense fallback={<LoadingScreen />}>
+            <PrimaryEnvironment
+              state={state}
+              user={currentUser}
+              onStateChange={handleStateUpdate}
+              onLogout={signOut}
+            />
+          </Suspense>
           {backToResourcesBar}
         </>
       );
@@ -211,12 +229,14 @@ export default function App() {
     if (currentUser.division === 'lower_secondary') {
       return (
         <>
-          <LowerSecondaryEnvironment
-            state={state}
-            user={currentUser}
-            onStateChange={handleStateUpdate}
-            onLogout={signOut}
-          />
+          <Suspense fallback={<LoadingScreen />}>
+            <LowerSecondaryEnvironment
+              state={state}
+              user={currentUser}
+              onStateChange={handleStateUpdate}
+              onLogout={signOut}
+            />
+          </Suspense>
           {backToResourcesBar}
         </>
       );
@@ -224,34 +244,38 @@ export default function App() {
 
     return (
       <>
-        <UpperSecondaryEnvironment
-          state={state}
-          user={currentUser}
-          onStateChange={handleStateUpdate}
-          onLogout={signOut}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <UpperSecondaryEnvironment
+            state={state}
+            user={currentUser}
+            onStateChange={handleStateUpdate}
+            onLogout={signOut}
+          />
+        </Suspense>
         {backToResourcesBar}
       </>
     );
   }
 
   return (
-    <PublicWebsite
-      state={state}
-      activePage={publicPage}
-      currentUser={currentUser}
-      onNavigate={(page) => {
-        setPublicPage(page);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }}
-      onLoginSuccess={(user, nextState) => {
-        if (nextState) setState(nextState);
-        localStorage.setItem(SESSION_KEY, user.id);
-        setCurrentUser(user);
-        setShowPublicWhileSignedIn(false);
-      }}
-      onReturnToWorkspace={() => setShowPublicWhileSignedIn(false)}
-      onStateChange={(next) => setState(next)}
-    />
+    <Suspense fallback={<LoadingScreen />}>
+      <PublicWebsite
+        state={state}
+        activePage={publicPage}
+        currentUser={currentUser}
+        onNavigate={(page) => {
+          setPublicPage(page);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onLoginSuccess={(user, nextState, sessionToken) => {
+          if (nextState) setState(nextState);
+          if (sessionToken) sessionStorage.setItem(SESSION_KEY, sessionToken);
+          setCurrentUser(user);
+          setShowPublicWhileSignedIn(false);
+        }}
+        onReturnToWorkspace={() => setShowPublicWhileSignedIn(false)}
+        onStateChange={(next) => setState(next)}
+      />
+    </Suspense>
   );
 }

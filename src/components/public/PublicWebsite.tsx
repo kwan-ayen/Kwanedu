@@ -9,8 +9,6 @@ import {
   Download,
   Eye,
   EyeOff,
-  GraduationCap,
-  Layers,
   Lock,
   Mail,
   Menu,
@@ -46,7 +44,7 @@ interface PublicWebsiteProps {
   activePage: PublicPageId;
   currentUser: UserAccount | null;
   onNavigate: (page: PublicPageId) => void;
-  onLoginSuccess: (user: UserAccount, nextState?: PlatformState) => void;
+  onLoginSuccess: (user: UserAccount, nextState?: PlatformState, sessionToken?: string) => void;
   onReturnToWorkspace?: () => void;
   onStateChange: (next: PlatformState) => void;
 }
@@ -65,7 +63,7 @@ const DIVISION_CARDS: {
     title: 'Primary Education',
     classesLabel: 'P.4 – P.7',
     vibe: 'Playful · Illustrated · Parent View',
-    accentHex: '#f28c28',
+    accentHex: '#10B981',
     description:
       'Friendly, colourful, illustrated lessons, short videos, interactive exercises, rewards, and parent visibility.',
     imageUrl: '/src/assets/images/division_primary_1794577152032.jpg',
@@ -105,6 +103,8 @@ function getInitialDivisionFromUrl(): DivisionId {
   return 'primary';
 }
 
+const BUILT_IN_PUBLIC_PAGE_IDS = new Set(['home', 'about', 'blog', 'resources', 'get_started', 'login']);
+
 const HERO_SPOTLIGHT_PHRASES = [
   'Primary Education (P.4 – P.7) · Illustrated Lessons & Interactive Fraction Labs',
   'Lower Secondary (S.1 – S.4) · Structured O-Level Notes, Quizzes & Red-Green Marking',
@@ -122,6 +122,7 @@ export function PublicWebsite({
   onStateChange,
 }: PublicWebsiteProps) {
   const cms = state.cmsPublished;
+  const publicNavItems = cms.navItems.filter((item) => item.id !== 'login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [heroPhraseIndex, setHeroPhraseIndex] = useState(0);
 
@@ -145,7 +146,6 @@ export function PublicWebsite({
 
   // Get Started Registration State (supports ?division=... preselection when opened in new tab)
   const initialDiv = getInitialDivisionFromUrl();
-  const [regRole, setRegRole] = useState<'student' | 'tutor'>('student');
   const [regDivision, setRegDivision] = useState<DivisionId>(initialDiv);
   const [regClass, setRegClass] = useState<ClassLevel>(DIVISION_META[initialDiv].classes[0]);
   const [regStream, setRegStream] = useState<UpperSecondaryStream>('Sciences');
@@ -165,20 +165,31 @@ export function PublicWebsite({
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPass, setShowLoginPass] = useState(false);
-  const [loginFilter, setLoginFilter] = useState<'all' | 'student' | 'tutor' | 'admin'>('all');
-  const [loginSearch, setLoginSearch] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<{ required: boolean; setupKeyConfigured: boolean } | null>(null);
+  const [setupKey, setSetupKey] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupPasswordConfirm, setSetupPasswordConfirm] = useState('');
+  const [setupError, setSetupError] = useState('');
+  const [setupLoading, setSetupLoading] = useState(false);
+
+  useEffect(() => {
+    if (activePage !== 'login') return;
+    api.getAdminSetupStatus().then(setSetupStatus).catch((err) => {
+      setSetupError(err instanceof Error ? err.message : 'Unable to check administrator setup status.');
+    });
+  }, [activePage]);
 
   const renderCmsSection = (sec: WebsiteSection) => {
     if (!sec.visible) return null;
-    const bodyAccent = cms.theme.secondaryAccent || '#f28c28';
+    const bodyAccent = cms.theme.secondaryAccent || '#10B981';
 
     if (sec.type === 'hero') {
       return (
         <section
           key={sec.id}
-          style={{ color: '#0f172a' }}
+          style={{ color: sec.textColor, backgroundColor: sec.backgroundColor }}
           className="border-b border-white/75 bg-hero-glow relative"
         >
           <div className="max-w-7xl mx-auto px-6 py-12 lg:py-16 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
@@ -216,9 +227,7 @@ export function PublicWebsite({
               <div className="pt-2 flex flex-wrap items-center gap-3.5">
                 <a
                   href={buildPageHref(sec.ctaTarget)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ backgroundColor: bodyAccent, color: '#1b1104' }}
+                  style={{ backgroundColor: bodyAccent, color: '#fff' }}
                   className={`px-6 py-3 text-sm font-bold hover:opacity-95 transition-all inline-flex items-center gap-2 whitespace-nowrap shadow-glow ${cms.theme.buttonStyle}`}
                 >
                   {sec.ctaLabel}
@@ -226,8 +235,6 @@ export function PublicWebsite({
                 </a>
                 <a
                   href={buildPageHref('about')}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className={`px-5 py-3 text-sm font-semibold glass-panel text-slate-900 hover:bg-white/85 transition-colors inline-flex items-center gap-2 whitespace-nowrap ${cms.theme.buttonStyle}`}
                 >
                   Academic Architecture
@@ -262,9 +269,36 @@ export function PublicWebsite({
       );
     }
 
+    if (sec.type === 'content') {
+      return (
+        <section key={sec.id} className="py-12 md:py-16" style={{ backgroundColor: sec.backgroundColor, color: sec.textColor }}>
+          <div className="max-w-4xl mx-auto px-6">
+            <article className="glass-card rounded-2xl p-6 md:p-10 space-y-4">
+              <h2 className="text-2xl md:text-3xl font-bold" style={{ color: sec.textColor, fontFamily: cms.theme.headingFont }}>
+                {sec.heading}
+              </h2>
+              {sec.subheading && <p className="text-lg font-medium">{sec.subheading}</p>}
+              {sec.imageUrl && (
+                <SafeImage src={sec.imageUrl} alt={sec.heading} className="w-full max-h-[28rem] object-cover rounded-xl" />
+              )}
+              <p className="text-sm leading-7 whitespace-pre-line">{sec.bodyText}</p>
+              {sec.ctaLabel && sec.ctaTarget && (
+                <a
+                  href={buildPageHref(sec.ctaTarget)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#10B981] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#059669]"
+                >
+                  {sec.ctaLabel} <ArrowRight className="w-4 h-4" />
+                </a>
+              )}
+            </article>
+          </div>
+        </section>
+      );
+    }
+
     if (sec.type === 'divisions') {
       return (
-        <section key={sec.id} className="border-b border-white/70 py-16">
+        <section key={sec.id} style={{ backgroundColor: sec.backgroundColor, color: sec.textColor }} className="border-b border-white/70 py-16">
           <div className="max-w-7xl mx-auto px-6 space-y-10">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div className="max-w-2xl space-y-2">
@@ -281,8 +315,6 @@ export function PublicWebsite({
               </div>
               <a
                 href={buildPageHref('get_started')}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-sm font-semibold text-slate-900 hover:text-amber-800 hover:underline inline-flex items-center gap-1.5 whitespace-nowrap"
               >
                 {sec.ctaLabel} <ArrowRight className="w-4 h-4" />
@@ -318,8 +350,6 @@ export function PublicWebsite({
                   <div className="px-6 pb-6 pt-2">
                     <a
                       href={buildPageHref('get_started', { division: card.id })}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="text-sm font-semibold hover:underline inline-flex items-center gap-1.5"
                       style={{ color: card.accentHex }}
                     >
@@ -337,7 +367,7 @@ export function PublicWebsite({
     if (sec.type === 'featured_courses') {
       const featured = state.courses.filter((c) => c.status === 'published').slice(0, 3);
       return (
-        <section key={sec.id} className="border-b border-white/70 py-16 bg-dots">
+        <section key={sec.id} style={{ backgroundColor: sec.backgroundColor, color: sec.textColor }} className="border-b border-white/70 py-16 bg-dots">
           <div className="max-w-7xl mx-auto px-6 space-y-8">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div className="max-w-2xl space-y-2">
@@ -354,8 +384,6 @@ export function PublicWebsite({
               </div>
               <a
                 href={buildPageHref('resources')}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-sm font-semibold text-slate-900 hover:text-amber-800 hover:underline whitespace-nowrap inline-flex items-center gap-1.5"
               >
                 {sec.ctaLabel} <ArrowRight className="w-4 h-4" />
@@ -380,8 +408,6 @@ export function PublicWebsite({
                     <span className="font-bold text-slate-950 font-mono-tabular">{formatUGX(c.priceUGX)}</span>
                     <a
                       href={buildPageHref('get_started', { division: c.division })}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="font-semibold text-slate-900 hover:text-amber-800 hover:underline inline-flex items-center gap-1"
                     >
                       Enrol via Division <ArrowRight className="w-3.5 h-3.5" />
@@ -397,7 +423,7 @@ export function PublicWebsite({
 
     if (sec.type === 'mission_pillars') {
       return (
-        <section key={sec.id} className="border-b border-white/70 py-16 bg-dots">
+        <section key={sec.id} style={{ backgroundColor: sec.backgroundColor, color: sec.textColor }} className="border-b border-white/70 py-16 bg-dots">
           <div className="max-w-7xl mx-auto px-6 space-y-8">
             <div className="max-w-2xl space-y-2">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">
@@ -444,7 +470,7 @@ export function PublicWebsite({
 
     // Promo Banner / CTA Band (Frosted Glass Spotlight Card, Zero Blue)
     return (
-      <section key={sec.id} className="py-12">
+      <section key={sec.id} style={{ backgroundColor: sec.backgroundColor, color: sec.textColor }} className="py-12">
         <div className="max-w-7xl mx-auto px-6">
           <div className="glass-card rounded-3xl p-8 md:p-10 flex flex-wrap items-center justify-between gap-6">
             <div className="max-w-2xl space-y-2">
@@ -459,9 +485,7 @@ export function PublicWebsite({
             </div>
             <a
               href={buildPageHref(sec.ctaTarget)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ backgroundColor: bodyAccent, color: '#1b1104' }}
+              style={{ backgroundColor: bodyAccent, color: '#fff' }}
               className={`inline-flex items-center gap-2 px-6 py-3 text-sm font-bold shadow-glow hover:opacity-95 whitespace-nowrap ${cms.theme.buttonStyle}`}
             >
               {sec.ctaLabel}
@@ -475,7 +499,7 @@ export function PublicWebsite({
 
   return (
     <div
-      className="min-h-screen flex flex-col bg-glass-canvas text-slate-900"
+      className="min-h-screen flex flex-col bg-animated-canvas text-slate-900"
       style={
         {
           '--brand-primary': cms.theme.primaryAccent,
@@ -487,41 +511,26 @@ export function PublicWebsite({
       }
     >
       {/* Light-Blue Glassmorphism Header (Blue appears strictly in Header & Footer) */}
-      <header className="sticky top-0 z-30 glass-header-footer border-b border-sky-200/80 text-slate-900">
+      <header className="sticky top-0 z-30 glass-header-footer border-b border-[#1D5E96] text-white">
         <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-8">
           <a
             href={buildPageHref('home')}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2.5 text-xl font-extrabold tracking-tight text-slate-950 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2.5 text-xl font-extrabold tracking-tight text-white whitespace-nowrap shrink-0"
             style={{ fontFamily: cms.theme.headingFont }}
           >
-            <span
-              className="w-8 h-8 rounded-lg text-slate-950 text-sm font-extrabold flex items-center justify-center border border-sky-300/90 shadow-sm"
-              style={{ backgroundColor: cms.theme.primaryAccent || '#bae6fd' }}
-            >
-              K
-            </span>
+            <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-9 h-9 rounded-xl shadow-sm" />
             <span>{cms.brandName}</span>
           </a>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-800">
-            {(
-              [
-                { id: 'home', label: 'Home' },
-                { id: 'about', label: 'About Us' },
-                { id: 'blog', label: 'Blog' },
-                { id: 'resources', label: 'Resources' },
-                { id: 'get_started', label: 'Get Started' },
-              ] as const
-            ).map((item) => (
+          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-[#E2E8F0]">
+            {publicNavItems.map((item) => (
               <a
                 key={item.id}
                 href={buildPageHref(item.id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`whitespace-nowrap shrink-0 transition-colors hover:text-slate-950 ${
-                  activePage === item.id ? 'text-slate-950 font-bold underline underline-offset-8 decoration-2' : ''
+                className={`whitespace-nowrap shrink-0 transition-colors ${
+                  item.id === 'get_started'
+                    ? 'px-4 py-2 rounded-lg bg-[#10B981] text-white font-semibold hover:bg-[#059669]'
+                    : `hover:text-white ${activePage === item.id ? 'text-white font-bold underline underline-offset-8 decoration-2 decoration-[#34D399]' : ''}`
                 }`}
               >
                 {item.label}
@@ -532,9 +541,7 @@ export function PublicWebsite({
           <div className="flex items-center gap-3 shrink-0">
             <a
               href={currentUser ? '/?view=workspace' : buildPageHref('login')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`hidden md:inline-flex px-5 py-2 text-sm font-semibold text-slate-950 bg-white/75 hover:bg-white border border-sky-300/80 shadow-soft whitespace-nowrap shrink-0 transition-colors ${cms.theme.buttonStyle}`}
+              className={`hidden md:inline-flex px-5 py-2 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/30 shadow-soft whitespace-nowrap shrink-0 transition-colors ${cms.theme.buttonStyle}`}
             >
               {currentUser ? 'My Workspace' : 'Login'}
             </a>
@@ -542,7 +549,7 @@ export function PublicWebsite({
               type="button"
               onClick={() => setMobileMenuOpen((o) => !o)}
               aria-label="Toggle navigation menu"
-              className="md:hidden p-2 text-slate-900 bg-white/65 border border-sky-300/80 rounded-lg"
+              className="md:hidden p-2 text-white bg-white/10 border border-white/30 rounded-lg"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -550,14 +557,14 @@ export function PublicWebsite({
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-sky-200/80 bg-sky-50/90 backdrop-blur-xl px-6 py-4 space-y-2">
+          <div className="md:hidden border-t border-[#1D5E96] bg-[#0F4C81] px-6 py-4 space-y-2">
             {(
               [
-                { id: 'home', label: 'Home', href: buildPageHref('home') },
-                { id: 'about', label: 'About Us', href: buildPageHref('about') },
-                { id: 'blog', label: 'Blog', href: buildPageHref('blog') },
-                { id: 'resources', label: 'Resources', href: buildPageHref('resources') },
-                { id: 'get_started', label: 'Get Started', href: buildPageHref('get_started') },
+                ...publicNavItems.map((navItem) => ({
+                  id: navItem.id,
+                  label: navItem.label,
+                  href: buildPageHref(navItem.id),
+                })),
                 {
                   id: 'login',
                   label: currentUser ? 'My Workspace' : 'Login',
@@ -568,10 +575,12 @@ export function PublicWebsite({
               <a
                 key={item.id}
                 href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
                 onClick={() => setMobileMenuOpen(false)}
-                className="block w-full text-left py-2 text-sm font-semibold text-slate-900 hover:text-slate-950"
+                className={`block w-full text-left py-2 text-sm font-semibold ${
+                  item.id === 'get_started'
+                    ? 'text-[#34D399]'
+                    : 'text-[#E2E8F0] hover:text-white'
+                }`}
               >
                 {item.label}
               </a>
@@ -614,8 +623,6 @@ export function PublicWebsite({
                     <a
                       key={`${copyIdx}-${idx}`}
                       href={item.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-3 px-6 font-medium text-slate-700 hover:text-slate-950 transition-colors whitespace-nowrap"
                     >
                       <span className="font-bold text-amber-700">KWAN</span>
@@ -634,13 +641,25 @@ export function PublicWebsite({
 
       <main className="flex-1">
         {/* HOME & ABOUT */}
-        {activePage === 'home' && cms.pages.home.map(renderCmsSection)}
-        {activePage === 'about' && cms.pages.about.map(renderCmsSection)}
+        {activePage === 'home' && (cms.pages.home || []).map(renderCmsSection)}
+        {activePage === 'about' && (cms.pages.about || []).map(renderCmsSection)}
+        {!BUILT_IN_PUBLIC_PAGE_IDS.has(activePage) && (
+          cms.pages[activePage]
+            ? cms.pages[activePage].map(renderCmsSection)
+            : (
+                <section className="max-w-3xl mx-auto px-6 py-24 text-center space-y-4">
+                  <h1 className="text-3xl font-bold text-slate-950">Page not found</h1>
+                  <a href={buildPageHref('home')} className="font-semibold text-[#0F4C81] hover:underline">
+                    Return to home
+                  </a>
+                </section>
+              )
+        )}
 
         {/* BLOG */}
         {activePage === 'blog' && (
           <>
-            {cms.pages.blog.map(renderCmsSection)}
+            {(cms.pages.blog || []).map(renderCmsSection)}
             <section className="max-w-7xl mx-auto px-6 py-12 space-y-8">
               <div className="flex flex-wrap items-center gap-2">
                 {(
@@ -714,7 +733,7 @@ export function PublicWebsite({
         {/* RESOURCES */}
         {activePage === 'resources' && (
           <>
-            {cms.pages.resources.map(renderCmsSection)}
+            {(cms.pages.resources || []).map(renderCmsSection)}
             <section className="max-w-7xl mx-auto px-6 py-12 space-y-8">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -783,7 +802,7 @@ export function PublicWebsite({
                             <button
                               type="button"
                               onClick={() => setCheckoutResource(res)}
-                              style={{ backgroundColor: cms.theme.secondaryAccent || '#f28c28', color: '#1b1104' }}
+                              style={{ backgroundColor: cms.theme.secondaryAccent || '#10B981', color: '#fff' }}
                               className="px-3.5 py-2 text-xs font-bold rounded-lg hover:opacity-95 whitespace-nowrap"
                             >
                               Purchase via KWAN
@@ -791,9 +810,7 @@ export function PublicWebsite({
                           ) : (
                             <a
                               href={buildPageHref('login')}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ backgroundColor: cms.theme.secondaryAccent || '#f28c28', color: '#1b1104' }}
+                              style={{ backgroundColor: cms.theme.secondaryAccent || '#10B981', color: '#fff' }}
                               className="px-3.5 py-2 text-xs font-bold rounded-lg hover:opacity-95 whitespace-nowrap inline-block"
                             >
                               Purchase via KWAN
@@ -811,11 +828,10 @@ export function PublicWebsite({
         {/* GET STARTED — INTERACTIVE DYNAMIC REGISTRATION STUDIO */}
         {activePage === 'get_started' && (
           <>
-            {cms.pages.get_started.map(renderCmsSection)}
-            <section className="max-w-7xl mx-auto px-6 py-12">
+            <section className="max-w-3xl mx-auto px-6 py-12">
               {(() => {
                 const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim());
-                const passHasLength = regPassword.length >= 6;
+                const passHasLength = regPassword.length >= 8;
                 const passHasMix = /[A-Za-z]/.test(regPassword) && /[0-9]/.test(regPassword);
                 const passStrength = !regPassword
                   ? 0
@@ -825,20 +841,10 @@ export function PublicWebsite({
                   ? 2
                   : 1;
                 const passwordsMatch =
-                  regPassword.length >= 4 && regConfirmPassword.length > 0 && regPassword === regConfirmPassword;
-                const activeComboObj =
-                  UPPER_SECONDARY_COMBINATIONS[regStream].find((c) => c.label === regCombo) ||
-                  UPPER_SECONDARY_COMBINATIONS[regStream][0];
-                const matchingCourses = state.courses.filter(
-                  (c) =>
-                    c.status === 'published' &&
-                    c.division === regDivision &&
-                    c.allowedClasses.includes(regClass)
-                );
+                  regPassword.length >= 8 && regConfirmPassword.length > 0 && regPassword === regConfirmPassword;
 
                 return (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    {/* Left Column: Dynamic Cascading Registration Form */}
+                  <div>
                     <form
                       onSubmit={async (e) => {
                         e.preventDefault();
@@ -851,8 +857,8 @@ export function PublicWebsite({
                           setRegError('Please enter a valid email address.');
                           return;
                         }
-                        if (regPassword.length < 4) {
-                          setRegError('Password must be at least 4 characters.');
+                        if (regPassword.length < 8) {
+                          setRegError('Password must be at least 8 characters.');
                           return;
                         }
                         if (regPassword !== regConfirmPassword) {
@@ -866,56 +872,34 @@ export function PublicWebsite({
                             email: regEmail.trim(),
                             password: regPassword,
                             confirmPassword: regConfirmPassword,
-                            role: regRole,
-                            division: regRole === 'student' ? regDivision : undefined,
-                            classLevel: regRole === 'student' ? regClass : undefined,
-                            stream:
-                              regRole === 'student' && regDivision === 'upper_secondary' ? regStream : undefined,
-                            subjectCombination:
-                              regRole === 'student' && regDivision === 'upper_secondary' ? regCombo : undefined,
-                            guardianName:
-                              regRole === 'student' && regDivision === 'primary' ? regGuardianName : undefined,
-                            guardianContact:
-                              regRole === 'student' && regDivision === 'primary' ? regGuardianContact : undefined,
+                            role: 'student',
+                            division: regDivision,
+                            classLevel: regClass,
+                            stream: regDivision === 'upper_secondary' ? regStream : undefined,
+                            subjectCombination: regDivision === 'upper_secondary' ? regCombo : undefined,
+                            guardianName: regDivision === 'primary' ? regGuardianName : undefined,
+                            guardianContact: regDivision === 'primary' ? regGuardianContact : undefined,
                           } as Partial<UserAccount> & { confirmPassword?: string });
-                          onLoginSuccess(res.user, res.state);
+                          onLoginSuccess(res.user, res.state, res.sessionToken);
                         } catch (err) {
                           setRegError(err instanceof Error ? err.message : 'Registration failed');
                         } finally {
                           setRegLoading(false);
                         }
                       }}
-                      className="lg:col-span-7 glass-card rounded-2xl p-6 md:p-8 space-y-6"
+                      className="glass-card rounded-2xl p-6 md:p-8 space-y-6"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
                         <div>
-                          <p className="text-xs font-semibold text-amber-800">Account Onboarding</p>
+                          <p className="text-xs font-semibold text-[#0F4C81]">Student Account Onboarding</p>
                           <h2 className="text-2xl font-bold text-slate-950 mt-0.5">Create Your KWAN Account</h2>
-                        </div>
-                        <div className="flex items-center gap-1 glass-panel p-1 rounded-lg">
-                          <button
-                            type="button"
-                            onClick={() => setRegRole('student')}
-                            className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
-                              regRole === 'student' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            Student Account
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setRegRole('tutor')}
-                            className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
-                              regRole === 'tutor' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            Tutor Application
-                          </button>
                         </div>
                       </div>
 
-                      {regRole === 'student' && (
-                        <div className="space-y-5 glass-panel rounded-xl p-5">
+                      <p className="text-xs text-slate-600">
+                        Tutor accounts are created by the KWAN administrator.
+                      </p>
+                      <div className="space-y-5 glass-panel rounded-xl p-5">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                               <label htmlFor="reg-division" className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -997,7 +981,6 @@ export function PublicWebsite({
                               </div>
                             </div>
                           )}
-
                           {regDivision === 'lower_secondary' && (
                             <p className="text-xs text-slate-600 pt-1">
                               Lower Secondary ({regClass}) follows the broad Ugandan O-Level subject curriculum—no stream or combination selection required.
@@ -1033,7 +1016,6 @@ export function PublicWebsite({
                             </div>
                           )}
                         </div>
-                      )}
 
                       {/* Account Identity & Password Fields */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1110,7 +1092,7 @@ export function PublicWebsite({
                                 <div className={`rounded ${passStrength >= 3 ? 'bg-emerald-600' : 'bg-slate-200'}`} />
                               </div>
                               <p className="text-[11px] text-slate-500">
-                                Strength: {passStrength === 3 ? 'Strong' : passStrength === 2 ? 'Good' : 'Minimum 4+ characters'}
+                                Strength: {passStrength === 3 ? 'Strong' : passStrength === 2 ? 'Good' : 'Minimum 8+ characters'}
                               </p>
                             </div>
                           )}
@@ -1171,157 +1153,22 @@ export function PublicWebsite({
                         <button
                           type="submit"
                           disabled={regLoading}
-                          style={{ backgroundColor: cms.theme.secondaryAccent || '#f28c28', color: '#1b1104' }}
+                          style={{ backgroundColor: cms.theme.secondaryAccent || '#10B981', color: '#fff' }}
                           className={`px-6 py-3 text-sm font-bold hover:opacity-95 disabled:opacity-50 inline-flex items-center gap-2 shadow-glow ${cms.theme.buttonStyle}`}
                         >
                           {regLoading
                             ? 'Creating Account...'
-                            : regRole === 'student'
-                            ? `Create Account & Enter ${regClass}`
-                            : 'Submit Tutor Application'}
+                            : `Create Account & Enter ${regClass}`}
                           <ArrowRight className="w-4 h-4" />
                         </button>
                         <a
                           href={buildPageHref('login')}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="text-xs font-semibold text-slate-700 hover:text-slate-950 hover:underline"
                         >
                           Already registered? Sign in here
                         </a>
                       </div>
                     </form>
-
-                    {/* Right Column: Live Dynamic Learning Environment Preview */}
-                    <aside className="lg:col-span-5 space-y-5">
-                      <div
-                        className={`rounded-2xl border p-6 space-y-5 shadow-soft transition-colors ${
-                          regRole === 'tutor'
-                            ? 'bg-stone-900/90 backdrop-blur-xl text-white border-stone-700'
-                            : regDivision === 'primary'
-                            ? 'bg-kid-pattern text-[#292524] border-2 border-amber-300 shadow-kid'
-                            : regDivision === 'lower_secondary'
-                            ? 'glass-card bg-dots text-slate-900'
-                            : 'bg-scholar-grid text-stone-100 border-stone-700'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p
-                              className={`text-xs font-semibold ${
-                                regRole === 'tutor' || regDivision === 'upper_secondary'
-                                  ? 'text-[#f28c28]'
-                                  : regDivision === 'primary'
-                                  ? 'text-amber-800'
-                                  : 'text-emerald-800'
-                              }`}
-                            >
-                              {regRole === 'tutor'
-                                ? 'KWAN Faculty Pathway'
-                                : `${DIVISION_META[regDivision].label} · ${regClass}`}
-                            </p>
-                            <h3
-                              className={`text-xl font-bold mt-1 ${
-                                regRole === 'student' && regDivision === 'primary'
-                                  ? 'font-kids'
-                                  : regRole === 'student' && regDivision === 'upper_secondary'
-                                  ? 'font-editorial font-semibold'
-                                  : ''
-                              }`}
-                            >
-                              {regRole === 'tutor'
-                                ? 'Tutor Verification & Course Assignment'
-                                : regDivision === 'primary'
-                                ? 'Friendly Visual Classroom'
-                                : regDivision === 'lower_secondary'
-                                ? 'Structured O-Level Workspace'
-                                : `${regStream} Research Environment`}
-                            </h3>
-                          </div>
-                          <GraduationCap className="w-6 h-6 shrink-0 opacity-85" />
-                        </div>
-
-                        {regRole === 'student' ? (
-                          <>
-                            <p className="text-xs opacity-85 leading-relaxed">
-                              {regDivision === 'primary'
-                                ? 'Large illustrated subject cards, interactive Fraction Labs, stars, teacher praise, and parent progress view.'
-                                : regDivision === 'lower_secondary'
-                                ? 'Subject-based Ugandan curriculum modules, downloadable PDF notes, timed quizzes, and Red & Green pen marking.'
-                                : 'Advanced seminar notes, research project rubrics, practical error analysis, and combination progression tracking.'}
-                            </p>
-
-                            {regDivision === 'upper_secondary' && (
-                              <div className="bg-stone-800/80 border border-stone-700 rounded-xl p-4 space-y-2">
-                                <p className="text-xs font-semibold text-[#f28c28]">
-                                  {regStream} Stream · {activeComboObj.code}
-                                </p>
-                                <div className="grid grid-cols-1 gap-1.5 text-xs text-stone-200">
-                                  {activeComboObj.subjects.map((sub) => (
-                                    <div key={sub} className="flex items-center gap-2">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-[#2bb673] shrink-0" />
-                                      <span>{sub}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="space-y-2 pt-2 border-t border-current/15">
-                              <p className="text-xs font-semibold">
-                                Instant {regClass} Curriculum Access ({matchingCourses.length} course(s) available)
-                              </p>
-                              {matchingCourses.length === 0 ? (
-                                <p className="text-xs opacity-75">
-                                  New {regClass} courses assigned by KWAN Administration will unlock automatically.
-                                </p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {matchingCourses.map((c) => (
-                                    <div
-                                      key={c.id}
-                                      className={`rounded-lg px-3 py-2 text-xs flex items-center justify-between gap-2 border ${
-                                        regDivision === 'upper_secondary'
-                                          ? 'bg-stone-800/85 border-stone-700 text-stone-100'
-                                          : 'bg-white/85 border-white text-slate-900'
-                                      }`}
-                                    >
-                                      <span className="font-semibold truncate">{c.title}</span>
-                                      <span className="font-mono-tabular shrink-0">{formatUGX(c.priceUGX)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="space-y-3 text-xs text-stone-300 leading-relaxed">
-                            <p>
-                              Tutor applicants register through Get Started and enter KWAN&apos;s approval queue. Once approved by an Administrator, you gain access to mark assigned courses with Red &amp; Green Pen feedback and Rubrics.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Live Account Readiness Summary */}
-                      <div className="glass-card rounded-xl p-4 text-xs text-slate-600 space-y-1.5">
-                        <p className="font-bold text-slate-950 flex items-center gap-1.5">
-                          <Layers className="w-4 h-4 text-amber-700" /> Live Registration Summary
-                        </p>
-                        <p>
-                          Learner: <strong className="text-slate-950">{regName.trim() || 'Awaiting name'}</strong>
-                        </p>
-                        {regRole === 'student' && (
-                          <p>
-                            Placement:{' '}
-                            <strong className="text-slate-950">
-                              {DIVISION_META[regDivision].label} · {regClass}
-                              {regDivision === 'upper_secondary' ? ` · ${regStream} (${activeComboObj.code})` : ''}
-                            </strong>
-                          </p>
-                        )}
-                      </div>
-                    </aside>
                   </div>
                 );
               })()}
@@ -1329,201 +1176,214 @@ export function PublicWebsite({
           </>
         )}
 
-        {/* LOGIN — INTERACTIVE AUTHENTICATION & ENVIRONMENT SWITCHER */}
+        {/* LOGIN — GLASS-EFFECT AUTHENTICATION */}
         {activePage === 'login' && (
-          <section className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setLoginError('');
-                setLoginLoading(true);
-                try {
-                  const res = await api.login(loginEmail, loginPassword);
-                  onLoginSuccess(res.user);
-                } catch (err) {
-                  setLoginError(err instanceof Error ? err.message : 'Login failed');
-                } finally {
-                  setLoginLoading(false);
-                }
-              }}
-              className="lg:col-span-5 glass-card rounded-2xl p-6 md:p-8 space-y-5"
-            >
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-amber-800">Unified KWAN Account</p>
-                <h1 className="text-2xl font-bold text-slate-950">Sign In to Your Classroom</h1>
-                <p className="text-xs text-slate-600">
-                  Your credentials route you straight to Primary, Lower Secondary, Upper Secondary, Tutor, or Admin spaces.
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    id="login-email"
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="amina.p5@kwan.ac.ug"
-                    className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-300/80 bg-white/85 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    id="login-password"
-                    type={showLoginPass ? 'text' : 'password'}
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-300/80 bg-white/85 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPass((s) => !s)}
-                    aria-label={showLoginPass ? 'Hide password' : 'Show password'}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-900"
-                  >
-                    {showLoginPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {loginError && (
-                <div className="text-xs text-red-800 bg-red-50/90 border border-red-200 rounded-lg px-3.5 py-2.5 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{loginError}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loginLoading}
-                style={{ backgroundColor: cms.theme.secondaryAccent || '#f28c28', color: '#1b1104' }}
-                className={`w-full py-3 text-sm font-bold hover:opacity-95 disabled:opacity-50 shadow-glow ${cms.theme.buttonStyle}`}
-              >
-                {loginLoading ? 'Signing In...' : 'Login to KWAN'}
-              </button>
-
-              <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
-                <span className="text-slate-500">New student or tutor?</span>
-                <a
-                  href={buildPageHref('get_started')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-slate-900 hover:text-amber-800 hover:underline"
+          <section className="relative isolate flex min-h-[68vh] items-center justify-center overflow-hidden px-5 py-16">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+              <div className="absolute -left-24 top-8 h-72 w-72 rounded-full bg-[#0F4C81]/10 blur-3xl" />
+              <div className="absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-[#10B981]/10 blur-3xl" />
+              <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
+            </div>
+            <div className="relative w-full max-w-md">
+              {setupStatus?.required ? (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setSetupError('');
+                    if (setupPassword.length < 12) {
+                      setSetupError('Choose a password with at least 12 characters.');
+                      return;
+                    }
+                    if (setupPassword !== setupPasswordConfirm) {
+                      setSetupError('The passwords do not match.');
+                      return;
+                    }
+                    setSetupLoading(true);
+                    try {
+                      const result = await api.setupAdmin(setupKey, setupPassword);
+                      onLoginSuccess(result.user, undefined, result.sessionToken);
+                    } catch (err) {
+                      setSetupError(err instanceof Error ? err.message : 'Administrator setup failed.');
+                    } finally {
+                      setSetupLoading(false);
+                    }
+                  }}
+                  className="space-y-5 rounded-3xl border border-white/70 bg-white/65 p-7 shadow-[0_24px_70px_-24px_rgba(10,37,64,0.42)] backdrop-blur-2xl md:p-9"
                 >
-                  Create Account in Get Started
-                </a>
-              </div>
-            </form>
-
-            {/* Right Column: Interactive Directory & One-Click Role Launcher */}
-            <div className="lg:col-span-7 glass-card rounded-2xl p-6 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-bold text-slate-950">Registered KWAN Accounts &amp; Quick Access</h2>
-                  <p className="text-xs text-slate-600">
-                    Click any account to sign in immediately or prefill credentials into the login form.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={loginSearch}
-                  onChange={(e) => setLoginSearch(e.target.value)}
-                  placeholder="Search by name, email, or class..."
-                  className="flex-1 min-w-[200px] px-3 py-2 text-xs bg-white/85 border border-slate-300/80 rounded-lg"
-                />
-                <div className="flex items-center gap-1 glass-panel p-1 rounded-lg">
-                  {(
-                    [
-                      { id: 'all', label: 'All' },
-                      { id: 'student', label: 'Students' },
-                      { id: 'tutor', label: 'Tutors' },
-                      { id: 'admin', label: 'Admin' },
-                    ] as const
-                  ).map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setLoginFilter(f.id)}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
-                        loginFilter === f.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'
-                      }`}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                {state.users
-                  .filter((u) => loginFilter === 'all' || u.role === loginFilter)
-                  .filter((u) => {
-                    const q = loginSearch.trim().toLowerCase();
-                    if (!q) return true;
-                    return (
-                      u.name.toLowerCase().includes(q) ||
-                      u.email.toLowerCase().includes(q) ||
-                      (u.classLevel || '').toLowerCase().includes(q)
-                    );
-                  })
-                  .map((u) => (
-                    <div
-                      key={u.id}
-                      className="glass-panel rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-950">{u.name}</p>
-                        <p className="text-[11px] text-slate-600 truncate">
-                          {u.email} ·{' '}
-                          {u.role === 'student'
-                            ? `${DIVISION_META[u.division!].short} (${u.classLevel}${
-                                u.stream ? ` · ${u.stream}` : ''
-                              })`
-                            : u.role === 'tutor'
-                            ? `Tutor (${u.approved ? 'Approved' : 'Pending Approval'})`
-                            : 'Platform Administrator'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLoginEmail(u.email);
-                            setLoginPassword(u.password);
-                            setLoginError('');
-                          }}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white/85 border border-slate-200 rounded-lg hover:bg-white"
-                        >
-                          Fill Form
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onLoginSuccess(u)}
-                          className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors inline-flex items-center gap-1"
-                        >
-                          Enter <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                  <div className="space-y-2 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0F4C81] text-white shadow-lg shadow-[#0F4C81]/20">
+                      <Lock className="h-5 w-5" />
                     </div>
-                  ))}
-              </div>
+                    <p className="pt-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0F4C81]">Secure first-time setup</p>
+                    <h1 className="text-2xl font-bold text-[#0A2540]">Create the Administrator Password</h1>
+                    <p className="text-sm text-slate-600">Ayen Geoffrey Alexander · admin@kwan.ac.ug</p>
+                  </div>
+
+                  {!setupStatus.setupKeyConfigured && (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      Set <code className="font-semibold">ADMIN_SETUP_KEY</code> in the server environment before continuing.
+                    </div>
+                  )}
+
+                  <div>
+                    <label htmlFor="admin-setup-key" className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      One-time setup key
+                    </label>
+                    <input
+                      id="admin-setup-key"
+                      type="password"
+                      required
+                      autoComplete="off"
+                      value={setupKey}
+                      onChange={(e) => setSetupKey(e.target.value)}
+                      className="w-full rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm shadow-inner shadow-slate-900/5 backdrop-blur focus:border-[#0F4C81] focus:outline-none focus:ring-2 focus:ring-[#0F4C81]/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="admin-setup-password" className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      New password (12+ characters)
+                    </label>
+                    <input
+                      id="admin-setup-password"
+                      type="password"
+                      required
+                      minLength={12}
+                      autoComplete="new-password"
+                      value={setupPassword}
+                      onChange={(e) => setSetupPassword(e.target.value)}
+                      className="w-full rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm shadow-inner shadow-slate-900/5 backdrop-blur focus:border-[#0F4C81] focus:outline-none focus:ring-2 focus:ring-[#0F4C81]/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="admin-setup-confirm" className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Confirm new password
+                    </label>
+                    <input
+                      id="admin-setup-confirm"
+                      type="password"
+                      required
+                      minLength={12}
+                      autoComplete="new-password"
+                      value={setupPasswordConfirm}
+                      onChange={(e) => setSetupPasswordConfirm(e.target.value)}
+                      className="w-full rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm shadow-inner shadow-slate-900/5 backdrop-blur focus:border-[#0F4C81] focus:outline-none focus:ring-2 focus:ring-[#0F4C81]/20"
+                    />
+                  </div>
+
+                  {(setupError || setupStatus === null) && (
+                    <div role="alert" className="rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-800">
+                      {setupError || 'Checking administrator setup…'}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={setupLoading || !setupStatus.setupKeyConfigured}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10B981] px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-[#059669] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {setupLoading ? 'Creating secure account…' : 'Create Admin Password'}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setLoginError('');
+                    setLoginLoading(true);
+                    try {
+                      const res = await api.login(loginEmail, loginPassword);
+                      onLoginSuccess(res.user, undefined, res.sessionToken);
+                    } catch (err) {
+                      setLoginError(err instanceof Error ? err.message : 'Login failed');
+                    } finally {
+                      setLoginLoading(false);
+                    }
+                  }}
+                  className="space-y-5 rounded-3xl border border-white/70 bg-white/65 p-7 shadow-[0_24px_70px_-24px_rgba(10,37,64,0.42)] backdrop-blur-2xl md:p-9"
+                >
+                  <div className="space-y-2 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0F4C81] text-white shadow-lg shadow-[#0F4C81]/20">
+                      <Lock className="h-5 w-5" />
+                    </div>
+                    <p className="pt-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0F4C81]">Secure KWAN access</p>
+                    <h1 className="text-2xl font-bold text-[#0A2540]">Welcome back</h1>
+                    <p className="text-sm text-slate-600">Sign in to continue to your learning space.</p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="login-email" className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Email address
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#0F4C81]/70" />
+                      <input
+                        id="login-email"
+                        type="email"
+                        required
+                        autoComplete="username"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="w-full rounded-xl border border-white/80 bg-white/70 py-3 pl-10 pr-4 text-sm shadow-inner shadow-slate-900/5 backdrop-blur focus:border-[#0F4C81] focus:outline-none focus:ring-2 focus:ring-[#0F4C81]/20"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="login-password" className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#0F4C81]/70" />
+                      <input
+                        id="login-password"
+                        type={showLoginPass ? 'text' : 'password'}
+                        required
+                        autoComplete="current-password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="w-full rounded-xl border border-white/80 bg-white/70 py-3 pl-10 pr-12 text-sm shadow-inner shadow-slate-900/5 backdrop-blur focus:border-[#0F4C81] focus:outline-none focus:ring-2 focus:ring-[#0F4C81]/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPass((s) => !s)}
+                        aria-label={showLoginPass ? 'Hide password' : 'Show password'}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-[#0F4C81]"
+                      >
+                        {showLoginPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {loginError && (
+                    <div role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-800">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>{loginError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loginLoading}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10B981] px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-[#059669] disabled:opacity-50"
+                  >
+                    {loginLoading ? 'Signing in…' : 'Sign in'}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+
+                  <div className="border-t border-white/70 pt-4 text-center text-xs">
+                    <span className="text-slate-500">New student? </span>
+                    <a href={buildPageHref('get_started')} className="font-semibold text-[#0F4C81] hover:underline">
+                      Create an account
+                    </a>
+                    <p className="mt-2 text-slate-500">Tutor accounts are created by the administrator.</p>
+                  </div>
+                </form>
+              )}
             </div>
           </section>
         )}
@@ -1531,50 +1391,43 @@ export function PublicWebsite({
       </main>
 
       {/* Light-Blue Glassmorphism Institutional Footer (Blue appears strictly in Header & Footer) */}
-      <footer className="glass-header-footer text-slate-800 border-t border-sky-200/80 py-12">
+      <footer className="bg-[#0A2540] text-[#CBD5E1] border-t border-[#163A5F] py-12">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
           <div className="md:col-span-6 space-y-2.5">
             <div className="flex items-center gap-2.5">
-              <span
-                className="w-7 h-7 rounded-md text-xs font-extrabold flex items-center justify-center border border-sky-300/90 text-slate-950"
-                style={{ backgroundColor: cms.theme.primaryAccent || '#bae6fd' }}
-              >
-                K
-              </span>
-              <p className="text-lg font-bold text-slate-950">{cms.brandName}</p>
+              <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-8 h-8 rounded-lg" />
+              <p className="text-lg font-bold text-white">{cms.brandName}</p>
             </div>
-            <p className="text-xs text-slate-700 max-w-md leading-relaxed">{cms.footer.tagline}</p>
+            <p className="text-xs text-[#CBD5E1] max-w-md leading-relaxed">{cms.footer.tagline}</p>
           </div>
           <div className="md:col-span-3 space-y-2 text-xs">
-            <p className="font-bold text-slate-950">Navigation</p>
-            <div className="flex flex-col items-start gap-1.5 text-slate-700">
-              <a href={buildPageHref('home')} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 hover:underline transition-colors">
+            <p className="font-bold text-white">Navigation</p>
+            <div className="flex flex-col items-start gap-1.5 text-[#CBD5E1]">
+              <a href={buildPageHref('home')} className="hover:text-[#10B981] hover:underline transition-colors">
                 Home
               </a>
-              <a href={buildPageHref('about')} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 hover:underline transition-colors">
+              <a href={buildPageHref('about')} className="hover:text-[#10B981] hover:underline transition-colors">
                 About Us
               </a>
-              <a href={buildPageHref('blog')} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 hover:underline transition-colors">
+              <a href={buildPageHref('blog')} className="hover:text-[#10B981] hover:underline transition-colors">
                 Blog
               </a>
-              <a href={buildPageHref('resources')} target="_blank" rel="noopener noreferrer" className="hover:text-slate-950 hover:underline transition-colors">
+              <a href={buildPageHref('resources')} className="hover:text-[#10B981] hover:underline transition-colors">
                 Resources
               </a>
               <a
                 href={buildPageHref('get_started')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-slate-950 hover:underline transition-colors"
+                className="hover:text-[#10B981] hover:underline transition-colors"
               >
                 Get Started
               </a>
             </div>
           </div>
           <div className="md:col-span-3 space-y-2 text-xs">
-            <p className="font-bold text-slate-950">Contact</p>
-            <p className="font-semibold text-slate-900">{cms.footer.contactEmail}</p>
-            <p className="text-slate-700">{cms.footer.location}</p>
-            <p className="text-slate-600 pt-2">{cms.footer.copyright}</p>
+            <p className="font-bold text-white">Contact</p>
+            <p className="font-semibold text-[#CBD5E1]">{cms.footer.contactEmail}</p>
+            <p className="text-[#CBD5E1]">{cms.footer.location}</p>
+            <p className="text-slate-400 pt-2">{cms.footer.copyright}</p>
           </div>
         </div>
       </footer>

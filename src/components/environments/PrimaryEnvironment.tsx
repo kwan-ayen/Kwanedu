@@ -17,6 +17,7 @@ import { FractionExplorer } from '../shared/InteractiveLabs';
 import { PaymentCheckoutModal } from '../shared/PaymentCheckoutModal';
 import { StudentProgressDashboard, type LocalPracticeScore } from '../shared/StudentProgressDashboard';
 import { CourseDiscussionForum } from '../shared/CourseDiscussionForum';
+import { StudentResourceLibrary } from '../shared/StudentResourceLibrary';
 
 interface PrimaryEnvironmentProps {
   state: PlatformState;
@@ -41,7 +42,7 @@ export function PrimaryEnvironment({
   const [assignmentAnswer, setAssignmentAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [checkoutCourse, setCheckoutCourse] = useState<Course | null>(null);
-  const [activeTab, setActiveTab] = useState<'learn' | 'progress' | 'forum' | 'rewards'>('learn');
+  const [activeTab, setActiveTab] = useState<'learn' | 'progress' | 'forum' | 'rewards' | 'resources'>('learn');
   const [practiceScores, setPracticeScores] = useState<Record<string, LocalPracticeScore>>({});
 
   const classLevel = user.classLevel || 'P.5';
@@ -84,34 +85,31 @@ export function PrimaryEnvironment({
     course.accessType === 'free' || user.enrolledCourseIds.includes(course.id);
 
   return (
-    <div className="min-h-screen flex flex-col bg-kid-pattern text-[#292524]">
-      {/* Friendly Light-Blue Glass Primary Header */}
-      <header className="glass-header-footer border-b border-sky-200/80 px-6 py-4 sticky top-0 z-20 text-slate-900">
+    <div className="min-h-screen flex flex-col bg-animated-canvas text-slate-900">
+      <header className="glass-header-footer border-b border-[#1D5E96] px-6 py-4 sticky top-0 z-20 text-white">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-sky-200/90 border border-sky-300 text-slate-950 font-kids font-extrabold flex items-center justify-center text-xl shadow-sm">
-              K
-            </div>
+            <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-11 h-11 rounded-2xl shadow-sm" />
             <div>
-              <h1 className="font-kids text-xl font-bold text-slate-950">
+              <h1 className="font-kids text-xl font-bold text-white">
                 KWAN Primary Learning Space · {classLevel}
               </h1>
-              <p className="text-xs font-medium text-slate-700">
-                Welcome, <strong className="text-slate-950">{user.name}</strong> ·{' '}
-                <span className="font-mono-tabular font-semibold text-amber-800">{user.stars} Learning Stars</span>
+              <p className="text-xs font-medium text-[#E2E8F0]">
+                Welcome, <strong className="text-white">{user.name}</strong> ·{' '}
+                <span className="font-mono-tabular font-semibold text-[#34D399]">{user.stars} Learning Stars</span>
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 bg-white/65 backdrop-blur-md border border-sky-200 rounded-2xl p-1">
+            <div className="flex items-center gap-1 bg-white/10 border border-white/25 rounded-2xl p-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('learn')}
                 className={`px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-all ${
                   activeTab === 'learn'
-                    ? 'bg-amber-400 text-[#292524] shadow-sm'
-                    : 'text-slate-700 hover:bg-white/80'
+                    ? 'bg-[#34D399] text-[#0A2540] shadow-sm'
+                    : 'text-[#E2E8F0] hover:bg-white/15 hover:text-white'
                 }`}
               >
                 My Subjects
@@ -121,8 +119,8 @@ export function PrimaryEnvironment({
                 onClick={() => setActiveTab('progress')}
                 className={`px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-all ${
                   activeTab === 'progress'
-                    ? 'bg-amber-400 text-[#292524] shadow-sm'
-                    : 'text-slate-700 hover:bg-white/80'
+                    ? 'bg-[#34D399] text-[#0A2540] shadow-sm'
+                    : 'text-[#E2E8F0] hover:bg-white/15 hover:text-white'
                 }`}
               >
                 My Progress
@@ -132,19 +130,30 @@ export function PrimaryEnvironment({
                 onClick={() => setActiveTab('forum')}
                 className={`px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-all ${
                   activeTab === 'forum'
-                    ? 'bg-amber-400 text-[#292524] shadow-sm'
-                    : 'text-slate-700 hover:bg-white/80'
+                    ? 'bg-[#34D399] text-[#0A2540] shadow-sm'
+                    : 'text-[#E2E8F0] hover:bg-white/15 hover:text-white'
                 }`}
               >
                 Class Q&amp;A Forum
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab('resources')}
+                className={`px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-all ${
+                  activeTab === 'resources'
+                    ? 'bg-[#34D399] text-[#0A2540] shadow-sm'
+                    : 'text-[#E2E8F0] hover:bg-white/15 hover:text-white'
+                }`}
+              >
+                Study Resources
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('rewards')}
                 className={`px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-all ${
                   activeTab === 'rewards'
-                    ? 'bg-amber-400 text-[#292524] shadow-sm'
-                    : 'text-slate-700 hover:bg-white/80'
+                    ? 'bg-[#34D399] text-[#0A2540] shadow-sm'
+                    : 'text-[#E2E8F0] hover:bg-white/15 hover:text-white'
                 }`}
               >
                 Stars &amp; Feedback
@@ -156,8 +165,8 @@ export function PrimaryEnvironment({
               onClick={() => setParentView((p) => !p)}
               className={`px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 whitespace-nowrap transition-colors ${
                 parentView
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white/75 text-slate-900 border-sky-300/80 hover:bg-white'
+                  ? 'bg-[#34D399] text-[#0A2540] border-[#34D399]'
+                  : 'bg-white/10 text-white border-white/30 hover:bg-white/20'
               }`}
             >
               <Eye className="w-3.5 h-3.5" />
@@ -168,7 +177,7 @@ export function PrimaryEnvironment({
               <button
                 type="button"
                 onClick={onLogout}
-                className="px-3.5 py-2 text-xs font-bold text-slate-900 bg-white/75 border border-sky-300/80 rounded-xl hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
+                className="px-3.5 py-2 text-xs font-bold text-white bg-white/10 border border-white/30 rounded-xl hover:bg-white/20 flex items-center gap-1.5 whitespace-nowrap"
               >
                 <LogOut className="w-3.5 h-3.5" /> Sign Out
               </button>
@@ -180,7 +189,7 @@ export function PrimaryEnvironment({
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-8">
         {/* Optional Parent / Guardian Summary Banner */}
         {parentView && (
-          <section className="glass-card border-2 border-amber-300/80 rounded-2xl p-6">
+          <section className="glass-card border border-[#D5E4E8] rounded-2xl p-6">
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div className="flex items-center gap-3">
                 <UserCheck className="w-6 h-6 text-emerald-700" />
@@ -237,14 +246,14 @@ export function PrimaryEnvironment({
                   return (
                     <div
                       key={course.id}
-                      className={`glass-card rounded-2xl border-2 overflow-hidden transition-all shadow-kid ${
-                        selected ? 'border-amber-500 -translate-y-0.5' : 'border-amber-200/80 hover:border-amber-400'
+                      className={`glass-card rounded-2xl border overflow-hidden transition-all shadow-soft ${
+                        selected ? 'border-[#0F4C81] -translate-y-0.5' : 'border-[#E2E8F0] hover:border-[#10B981]'
                       }`}
                     >
                       <SafeImage src={course.thumbnailUrl} alt={course.title} className="w-full h-36 object-cover" />
                       <div className="p-5">
                         <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1">
-                          <span className="text-amber-800">{course.subject}</span>
+                          <span className="text-[#0F4C81]">{course.subject}</span>
                           <span className="font-mono-tabular">{course.allowedClasses.join(', ')}</span>
                         </div>
                         <h3 className="font-kids text-lg font-bold text-[#292524] mb-2">{course.title}</h3>
@@ -260,7 +269,7 @@ export function PrimaryEnvironment({
                                 setActiveCourseId(course.id);
                                 setActiveLessonId(course.modules[0]?.lessons[0]?.id || null);
                               }}
-                              className="px-4 py-2 text-xs font-bold text-[#292524] bg-amber-400 rounded-xl hover:bg-amber-300 whitespace-nowrap"
+                              className="px-4 py-2 text-xs font-bold text-white bg-[#0F4C81] rounded-xl hover:bg-[#0A2540] whitespace-nowrap"
                             >
                               Open Subject
                             </button>
@@ -285,16 +294,16 @@ export function PrimaryEnvironment({
             {activeCourse && isEnrolled(activeCourse) && activeLesson && (
               <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* Lesson List + Progress */}
-                <div className="lg:col-span-4 glass-card border-2 border-amber-200/80 rounded-2xl p-5 space-y-4">
+                <div className="lg:col-span-4 glass-card rounded-2xl p-5 space-y-4">
                   <div>
-                    <p className="text-xs font-semibold text-amber-800">{activeCourse.subject}</p>
+                    <p className="text-xs font-semibold text-[#0F4C81]">{activeCourse.subject}</p>
                     <h3 className="text-lg font-bold text-slate-900">{activeCourse.title}</h3>
                     <div className="mt-3">
                       <div className="flex justify-between text-xs font-semibold text-slate-600 mb-1">
                         <span>Progress</span>
                         <span className="tabular-nums">{progressPercent}%</span>
                       </div>
-                      <div className="h-3 bg-amber-100 rounded-full overflow-hidden">
+                      <div className="h-3 bg-[#E2E8F0] rounded-full overflow-hidden">
                         <div
                           className="h-full bg-emerald-500 rounded-full transition-all"
                           style={{ width: `${progressPercent}%` }}
@@ -314,11 +323,11 @@ export function PrimaryEnvironment({
                           onClick={() => setActiveLessonId(lesson.id)}
                           className={`w-full text-left p-3 rounded-xl border-2 transition-colors flex items-start gap-3 ${
                             isCurrent
-                              ? 'bg-amber-50 border-amber-400'
-                              : 'bg-white border-slate-100 hover:border-amber-200'
+                              ? 'bg-[#E6F2F2] border-[#0F4C81]'
+                              : 'bg-white border-slate-200 hover:border-[#10B981]'
                           }`}
                         >
-                          <span className="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center shrink-0">
+                          <span className="w-7 h-7 rounded-lg bg-[#E2E8F0] text-[#0F4C81] text-xs font-bold flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -335,10 +344,10 @@ export function PrimaryEnvironment({
                 </div>
 
                 {/* Illustrated Lesson Stage */}
-                <div className="lg:col-span-8 glass-card border-2 border-amber-200/80 rounded-2xl p-6 space-y-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-amber-100 pb-4">
+                <div className="lg:col-span-8 glass-card rounded-2xl p-6 space-y-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
                     <div>
-                      <p className="text-xs font-semibold text-amber-800">
+                      <p className="text-xs font-semibold text-[#0F4C81]">
                         Step-by-Step Lesson · {activeLesson.durationMinutes} minutes
                       </p>
                       <h3 className="text-2xl font-bold text-slate-900 mt-1">{activeLesson.title}</h3>
@@ -358,8 +367,8 @@ export function PrimaryEnvironment({
                   </div>
 
                   {activeLesson.videoTranscript && (
-                    <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 flex items-start gap-4">
-                      <PlayCircle className="w-9 h-9 text-amber-600 shrink-0" />
+                    <div className="bg-[#E6F2F2] border border-[#D5E4E8] rounded-2xl p-5 flex items-start gap-4">
+                    <PlayCircle className="w-9 h-9 text-[#0F4C81] shrink-0" />
                       <div>
                         <p className="text-sm font-bold text-slate-900">Short Video Storyboard</p>
                         <p className="text-sm text-slate-700 mt-1 leading-relaxed">{activeLesson.videoTranscript}</p>
@@ -367,8 +376,8 @@ export function PrimaryEnvironment({
                     </div>
                   )}
 
-                  <div className="text-base text-slate-800 leading-relaxed bg-amber-50/40 border border-amber-100 rounded-2xl p-5">
-                    <div className="flex items-center gap-2 text-sm font-bold text-amber-900 mb-2">
+                  <div className="text-base text-slate-800 leading-relaxed bg-[#F4F7F6] border border-[#E2E8F0] rounded-2xl p-5">
+                    <div className="flex items-center gap-2 text-sm font-bold text-[#0F4C81] mb-2">
                       <BookOpen className="w-4 h-4" /> Reading & Illustrated Note
                     </div>
                     <p>{activeLesson.content}</p>
@@ -457,7 +466,7 @@ export function PrimaryEnvironment({
                         type="button"
                         disabled={submitting || !assignmentAnswer.trim()}
                         onClick={() => handleSubmitAssignment(activeCourse.assessments[0].id)}
-                        className="px-5 py-2.5 text-sm font-bold text-[#1b1104] bg-[#f28c28] rounded-xl hover:opacity-95 disabled:opacity-50 flex items-center gap-2 shadow-glow"
+                        className="px-5 py-2.5 text-sm font-bold text-white bg-[#10B981] rounded-xl hover:bg-[#059669] disabled:opacity-50 flex items-center gap-2 shadow-soft"
                       >
                         <Send className="w-4 h-4" />
                         {submitting ? 'Sending...' : 'Send to Teacher (+3 Stars)'}
@@ -489,6 +498,15 @@ export function PrimaryEnvironment({
             courses={eligibleCourses}
             defaultCourseId={activeCourse?.id}
             onStateChange={(next) => onStateChange(next)}
+          />
+        )}
+
+        {activeTab === 'resources' && (
+          <StudentResourceLibrary
+            state={state}
+            user={user}
+            division="primary"
+            onStateChange={onStateChange}
           />
         )}
 
@@ -546,10 +564,9 @@ export function PrimaryEnvironment({
 
       </main>
 
-      {/* Light-Blue Glassmorphism Footer */}
-      <footer className="glass-header-footer border-t border-sky-200/80 px-6 py-5 text-xs text-slate-800">
+      <footer className="bg-[#0F4C81] border-t border-[#1D5E96] px-6 py-5 text-xs text-[#E2E8F0]">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold text-slate-950">KWAN Primary Learning Space · {classLevel}</span>
+          <span className="font-semibold text-white">KWAN Primary Learning Space · {classLevel}</span>
           <span>Parent &amp; Guardian Progress Supported</span>
         </div>
       </footer>

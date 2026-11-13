@@ -32,7 +32,7 @@ export function HeroImageSlider({
   compact = false,
   autoplay = true,
   intervalSeconds = 5,
-  secondaryAccent = '#f28c28',
+  secondaryAccent = '#10B981',
 }: HeroImageSliderProps) {
   const activeSlides = slides.filter((s) => s.active !== false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -102,7 +102,7 @@ export function HeroImageSlider({
       }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
-      className={`relative w-full overflow-hidden rounded-2xl border border-white/75 bg-stone-900 shadow-lift focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f28c28] ${
+      className={`relative w-full overflow-hidden rounded-2xl border border-white/75 bg-stone-900 shadow-lift focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10B981] ${
         compact ? 'h-48' : 'h-72 sm:h-96 lg:h-[440px]'
       }`}
     >
@@ -169,9 +169,7 @@ export function HeroImageSlider({
               <div className="pt-1.5">
                 <a
                   href={buildSlideHref(current.ctaTarget, current.divisionParam)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ backgroundColor: secondaryAccent, color: '#1b1104' }}
+                  style={{ backgroundColor: secondaryAccent, color: '#fff' }}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold hover:opacity-95 transition-opacity whitespace-nowrap shadow-glow"
                 >
                   {current.ctaLabel} <ArrowRight className="w-3.5 h-3.5" />

@@ -123,7 +123,7 @@ export function PaymentCheckoutModal({
               type="button"
               disabled={processing}
               onClick={handlePay}
-              className="px-4 py-2 text-sm font-semibold text-slate-950 bg-[#f28c28] rounded-lg hover:bg-[#e07d1b] disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap"
+              className="px-4 py-2 text-sm font-semibold text-white bg-[#10B981] rounded-lg hover:bg-[#059669] disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap"
             >
               <CheckCircle2 className="w-4 h-4" />
               {processing ? 'Processing...' : amountUGX > 0 ? 'Complete Payment' : 'Enrol Free'}

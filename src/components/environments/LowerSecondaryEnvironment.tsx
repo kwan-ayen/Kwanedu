@@ -14,6 +14,7 @@ import { OsmosisCellExplorer } from '../shared/InteractiveLabs';
 import { PaymentCheckoutModal } from '../shared/PaymentCheckoutModal';
 import { StudentProgressDashboard } from '../shared/StudentProgressDashboard';
 import { CourseDiscussionForum } from '../shared/CourseDiscussionForum';
+import { StudentResourceLibrary } from '../shared/StudentResourceLibrary';
 
 interface LowerSecondaryEnvironmentProps {
   state: PlatformState;
@@ -30,7 +31,7 @@ export function LowerSecondaryEnvironment({
   onLogout,
   isAdminPreview = false,
 }: LowerSecondaryEnvironmentProps) {
-  const [section, setSection] = useState<'courses' | 'marking' | 'analytics' | 'forum'>('courses');
+  const [section, setSection] = useState<'courses' | 'marking' | 'analytics' | 'forum' | 'resources'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [homeworkText, setHomeworkText] = useState('');
@@ -94,19 +95,16 @@ export function LowerSecondaryEnvironment({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-glass-canvas bg-dots text-slate-900">
-      {/* Light-Blue Glassmorphism Header */}
-      <header className="glass-header-footer text-slate-900 border-b border-sky-200/80 px-6 py-4 sticky top-0 z-20">
+    <div className="min-h-screen flex flex-col bg-animated-canvas text-slate-900">
+      <header className="glass-header-footer text-white border-b border-[#1D5E96] px-6 py-4 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-200/90 border border-sky-300 text-slate-950 font-bold flex items-center justify-center shadow-sm">
-              K
-            </div>
+            <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-10 h-10 rounded-xl shadow-sm" />
             <div>
-              <p className="text-xs font-semibold text-amber-800">
+              <p className="text-xs font-semibold text-[#34D399]">
                 KWAN Lower Secondary · Ugandan Curriculum ({classLevel})
               </p>
-              <h1 className="text-lg font-bold text-slate-950">
+              <h1 className="text-lg font-bold text-white">
                 {user.name} — Structured Study Workspace
               </h1>
             </div>
@@ -119,6 +117,7 @@ export function LowerSecondaryEnvironment({
                 { id: 'marking', label: 'Red & Green Pen Marking' },
                 { id: 'analytics', label: 'Performance Analytics' },
                 { id: 'forum', label: 'Course Q&A Forum' },
+                { id: 'resources', label: 'Study Resources' },
               ] as const
             ).map((tab) => (
               <button
@@ -127,8 +126,8 @@ export function LowerSecondaryEnvironment({
                 onClick={() => setSection(tab.id)}
                 className={`px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
                   section === tab.id
-                    ? 'bg-slate-900 text-white shadow-soft'
-                    : 'bg-white/65 text-slate-800 hover:bg-white border border-sky-200/80'
+                    ? 'bg-[#34D399] text-[#0A2540] shadow-soft'
+                    : 'bg-white/10 text-[#E2E8F0] hover:bg-white/20 hover:text-white border border-white/25'
                 }`}
               >
                 {tab.label}
@@ -138,7 +137,7 @@ export function LowerSecondaryEnvironment({
               <button
                 type="button"
                 onClick={onLogout}
-                className="px-3.5 py-2 text-xs font-semibold text-slate-900 bg-white/75 border border-sky-300/80 rounded-lg hover:bg-white flex items-center gap-1.5 whitespace-nowrap"
+                className="px-3.5 py-2 text-xs font-semibold text-white bg-white/10 border border-white/30 rounded-lg hover:bg-white/20 flex items-center gap-1.5 whitespace-nowrap"
               >
                 <LogOut className="w-3.5 h-3.5" /> Logout
               </button>
@@ -198,7 +197,7 @@ export function LowerSecondaryEnvironment({
                         <button
                           type="button"
                           onClick={() => setCheckoutCourse(course)}
-                          className="px-4 py-2 text-xs font-bold text-[#1b1104] bg-[#f28c28] rounded-lg hover:opacity-95 whitespace-nowrap"
+                          className="px-4 py-2 text-xs font-bold text-white bg-[#10B981] rounded-lg hover:bg-[#059669] whitespace-nowrap"
                         >
                           Purchase Access
                         </button>
@@ -291,9 +290,9 @@ export function LowerSecondaryEnvironment({
 
                   {activeLesson.videoTranscript && (
                     <div className="bg-stone-900 text-stone-100 rounded-xl p-5 flex items-start gap-4">
-                      <Play className="w-7 h-7 text-[#f28c28] shrink-0 mt-0.5" />
+                      <Play className="w-7 h-7 text-[#10B981] shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs font-semibold text-[#f28c28]">Video Lecture Summary</p>
+                        <p className="text-xs font-semibold text-[#10B981]">Video Lecture Summary</p>
                         <p className="text-sm mt-1 leading-relaxed">{activeLesson.videoTranscript}</p>
                       </div>
                     </div>
@@ -361,7 +360,7 @@ export function LowerSecondaryEnvironment({
                             <button
                               type="button"
                               onClick={() => handleGradeQuiz(ass.id)}
-                              className="px-4 py-2 text-xs font-bold text-[#1b1104] bg-[#f28c28] rounded-lg hover:opacity-95 shadow-glow"
+                              className="px-4 py-2 text-xs font-bold text-white bg-[#10B981] rounded-lg hover:bg-[#059669] shadow-soft"
                             >
                               Check &amp; Save Quiz Score
                             </button>
@@ -486,12 +485,20 @@ export function LowerSecondaryEnvironment({
             onStateChange={(next) => onStateChange(next)}
           />
         )}
+
+        {section === 'resources' && (
+          <StudentResourceLibrary
+            state={state}
+            user={user}
+            division="lower_secondary"
+            onStateChange={onStateChange}
+          />
+        )}
       </main>
 
-      {/* Light-Blue Glassmorphism Footer */}
-      <footer className="glass-header-footer border-t border-sky-200/80 px-6 py-5 text-xs text-slate-800">
+      <footer className="bg-[#0F4C81] border-t border-[#1D5E96] px-6 py-5 text-xs text-[#E2E8F0]">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold text-slate-950">KWAN Lower Secondary · {classLevel}</span>
+          <span className="font-semibold text-white">KWAN Lower Secondary · {classLevel}</span>
           <span>O-Level Ugandan Competence Curriculum</span>
         </div>
       </footer>

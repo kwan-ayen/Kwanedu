@@ -1,8 +1,11 @@
+import 'dotenv/config';
 import express from 'express';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { getDb, saveDb } from './server/db.ts';
+import { hashPassword, verifyPassword } from './server/auth.ts';
 import type {
   BlogPost,
   CmsMediaAsset,
@@ -11,6 +14,7 @@ import type {
   ForumReply,
   ForumThread,
   ResourceItem,
+  ResourceAttachment,
   Submission,
   Transaction,
   UserAccount,
@@ -18,9 +22,47 @@ import type {
 } from './src/types/kwan.ts';
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '30mb' }));
+
+const sessions = new Map<string, string>();
+
+function stripSensitiveFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripSensitiveFields);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).filter(([key]) => key !== 'password').map(([key, item]) => [key, stripSensitiveFields(item)])
+    );
+  }
+  return value;
+}
+
+app.use((_req, res, next) => {
+  const json = res.json.bind(res);
+  res.json = ((body: unknown) => json(stripSensitiveFields(body))) as typeof res.json;
+  next();
+});
 
 const UPLOADS_DIR = path.resolve(process.cwd(), 'data/uploads');
+const RESOURCE_FILES_DIR = path.resolve(process.cwd(), 'data/resource-files');
+const MAX_RESOURCE_FILE_BYTES = 20 * 1024 * 1024;
+const RESOURCE_MIME_TYPES: Record<string, string> = {
+  '.csv': 'text/csv',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.odp': 'application/vnd.oasis.opendocument.presentation',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.rtf': 'application/rtf',
+  '.txt': 'text/plain',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
@@ -37,20 +79,154 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function createSession(userId: string): string {
+  const token = randomBytes(32).toString('hex');
+  sessions.set(token, userId);
+  return token;
+}
+
+function authenticatedUser(req: express.Request, db: ReturnType<typeof getDb>): UserAccount | undefined {
+  const token = req.header('authorization')?.replace(/^Bearer\s+/i, '');
+  const userId = token ? sessions.get(token) : undefined;
+  return userId ? db.users.find((user) => user.id === userId) : undefined;
+}
+
+type ResourceWriteBody = Partial<ResourceItem> & {
+  attachmentDataUrl?: string;
+  attachmentFileName?: string;
+  removeAttachment?: boolean;
+};
+
+function storeResourceAttachment(
+  fileName: string | undefined,
+  dataUrl: string | undefined
+): { attachment: ResourceAttachment } | { error: string; status: number } {
+  if (typeof fileName !== 'string' || typeof dataUrl !== 'string' || !fileName || !dataUrl) {
+    return { error: 'Choose a supported resource file to upload.', status: 400 };
+  }
+  const safeName = path.basename(fileName.replace(/\\/g, '/')).replace(/[\x00-\x1f\x7f]/g, '').trim();
+  const extension = path.extname(safeName).toLowerCase();
+  const mimeType = RESOURCE_MIME_TYPES[extension];
+  if (!safeName || safeName.length > 180 || !mimeType) {
+    return {
+      error: 'Supported files: PDF, Word, PowerPoint, Excel, OpenDocument, CSV, RTF, TXT, PNG, and JPG.',
+      status: 400,
+    };
+  }
+
+  const dataUrlMatch = dataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i);
+  if (!dataUrlMatch || dataUrlMatch[2].length % 4 !== 0) {
+    return { error: 'The uploaded file data is invalid.', status: 400 };
+  }
+  const declaredMimeType = dataUrlMatch[1].toLowerCase();
+  if (declaredMimeType !== mimeType && declaredMimeType !== 'application/octet-stream') {
+    return { error: 'The file type does not match its filename.', status: 400 };
+  }
+
+  const buffer = Buffer.from(dataUrlMatch[2], 'base64');
+  if (buffer.byteLength === 0) {
+    return { error: 'The uploaded file is empty.', status: 400 };
+  }
+  if (buffer.byteLength > MAX_RESOURCE_FILE_BYTES) {
+    return { error: 'Resource files must be 20 MB or smaller.', status: 413 };
+  }
+
+  const fileId = randomBytes(16).toString('hex');
+  try {
+    fs.mkdirSync(RESOURCE_FILES_DIR, { recursive: true });
+    fs.writeFileSync(path.join(RESOURCE_FILES_DIR, fileId), buffer, { flag: 'wx' });
+  } catch (error) {
+    console.error('Unable to store a resource attachment.', error);
+    return { error: 'Unable to store the resource file. Please try again.', status: 500 };
+  }
+  return {
+    attachment: {
+      fileId,
+      fileName: safeName,
+      mimeType,
+      sizeBytes: buffer.byteLength,
+    },
+  };
+}
+
+function removeResourceAttachment(attachment?: ResourceAttachment) {
+  if (!attachment || !/^[a-f0-9]{32}$/.test(attachment.fileId)) return;
+  const filePath = path.join(RESOURCE_FILES_DIR, attachment.fileId);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
 // Get full platform state
 app.get('/api/state', (_req, res) => {
   res.json(getDb());
 });
 
 // Authentication & Get Started Registration
+app.get('/api/auth/setup-status', (_req, res) => {
+  const admin = getDb().users.find((user) => user.role === 'admin');
+  res.json({
+    required: !admin?.password,
+    setupKeyConfigured: Boolean(process.env.ADMIN_SETUP_KEY?.trim()),
+  });
+});
+
+app.post('/api/auth/setup-admin', (req, res) => {
+  const db = getDb();
+  const admin = db.users.find((user) => user.role === 'admin');
+  if (!admin) {
+    res.status(500).json({ error: 'Administrator account is unavailable.' });
+    return;
+  }
+  if (admin.password) {
+    res.status(409).json({ error: 'Administrator setup has already been completed.' });
+    return;
+  }
+
+  const setupKey = process.env.ADMIN_SETUP_KEY?.trim();
+  const suppliedKey = typeof req.body?.setupKey === 'string' ? req.body.setupKey : '';
+  if (!setupKey) {
+    res.status(503).json({ error: 'Set ADMIN_SETUP_KEY in the server environment before setting up the admin account.' });
+    return;
+  }
+  const expected = Buffer.from(setupKey);
+  const supplied = Buffer.from(suppliedKey);
+  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+    res.status(403).json({ error: 'Invalid administrator setup key.' });
+    return;
+  }
+
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (password.length < 12) {
+    res.status(400).json({ error: 'Administrator password must be at least 12 characters long.' });
+    return;
+  }
+
+  admin.name = 'Ayen Geoffrey Alexander';
+  admin.password = hashPassword(password);
+  saveDb(db);
+  const sessionToken = createSession(admin.id);
+  res.status(201).json({ user: admin, sessionToken });
+});
+
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
   const db = getDb();
   const user = db.users.find(
-    (u) => u.email.toLowerCase() === String(email || '').trim().toLowerCase() && u.password === password
+    (u) =>
+      u.email.toLowerCase() === String(email || '').trim().toLowerCase() &&
+      Boolean(u.password) &&
+      verifyPassword(String(password || ''), u.password!)
   );
-  if (!user) {
+  if (!user || (user.role === 'tutor' && !user.approved)) {
     res.status(401).json({ error: 'Invalid email or password.' });
+    return;
+  }
+  res.json({ user, sessionToken: createSession(user.id) });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const user = authenticatedUser(req, getDb());
+  if (!user) {
+    res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
     return;
   }
   res.json({ user });
@@ -59,12 +235,16 @@ app.post('/api/auth/login', (req, res) => {
 app.post('/api/auth/register', (req, res) => {
   const body = req.body as Partial<UserAccount> & { confirmPassword?: string };
   const db = getDb();
+  if (body.role && body.role !== 'student') {
+    res.status(403).json({ error: 'Public registration is limited to student accounts. Tutors are added by an administrator.' });
+    return;
+  }
   if (!body.name?.trim() || !body.email?.trim() || !body.password) {
     res.status(400).json({ error: 'Name, email, and password are required.' });
     return;
   }
-  if (body.password.length < 4) {
-    res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+  if (body.password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters long.' });
     return;
   }
   if (body.confirmPassword !== undefined && body.password !== body.confirmPassword) {
@@ -77,7 +257,7 @@ app.post('/api/auth/register', (req, res) => {
     return;
   }
 
-  const role = body.role || 'student';
+  const role = 'student';
   const freeAccessibleCourses =
     role === 'student' && body.classLevel
       ? db.courses
@@ -95,7 +275,7 @@ app.post('/api/auth/register', (req, res) => {
     id: `u-${Date.now()}`,
     name: body.name.trim(),
     email: body.email.trim(),
-    password: body.password,
+    password: hashPassword(body.password),
     role,
     division: role === 'student' ? body.division : undefined,
     classLevel: role === 'student' ? body.classLevel : undefined,
@@ -104,7 +284,7 @@ app.post('/api/auth/register', (req, res) => {
       role === 'student' && body.division === 'upper_secondary' ? body.subjectCombination : undefined,
     guardianName: role === 'student' && body.division === 'primary' ? body.guardianName : undefined,
     guardianContact: role === 'student' && body.division === 'primary' ? body.guardianContact : undefined,
-    approved: role === 'tutor' ? !db.settings.requireTutorApproval : true,
+    approved: true,
     assignedCourseIds: [],
     enrolledCourseIds: freeAccessibleCourses,
     purchasedResourceIds: [],
@@ -116,7 +296,48 @@ app.post('/api/auth/register', (req, res) => {
 
   db.users.push(newUser);
   saveDb(db);
-  res.status(201).json({ user: newUser, state: db });
+  res.status(201).json({ user: newUser, state: db, sessionToken: createSession(newUser.id) });
+});
+
+app.post('/api/admin/tutors', (req, res) => {
+  const db = getDb();
+  const admin = authenticatedUser(req, db);
+  if (admin?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can create tutor accounts.' });
+    return;
+  }
+
+  const body = req.body as { name?: string; email?: string; password?: string };
+  const name = body.name?.trim();
+  const email = body.email?.trim();
+  const password = body.password || '';
+  if (!name || !email || password.length < 12) {
+    res.status(400).json({ error: 'Tutor name, email, and a temporary password of at least 12 characters are required.' });
+    return;
+  }
+  if (db.users.some((user) => user.email.toLowerCase() === email.toLowerCase())) {
+    res.status(409).json({ error: 'An account with this email already exists.' });
+    return;
+  }
+
+  const tutor: UserAccount = {
+    id: `u-${Date.now()}`,
+    name,
+    email,
+    password: hashPassword(password),
+    role: 'tutor',
+    approved: !db.settings.requireTutorApproval,
+    assignedCourseIds: [],
+    enrolledCourseIds: [],
+    purchasedResourceIds: [],
+    completedLessonIds: [],
+    stars: 0,
+    badges: [],
+    joinedAt: todayDate(),
+  };
+  db.users.push(tutor);
+  saveDb(db);
+  res.status(201).json({ user: tutor, state: db });
 });
 
 // Courses CRUD & Class Access Management
@@ -557,10 +778,28 @@ app.post('/api/blog/:id/comments', (req, res) => {
 // Resources Management
 app.post('/api/resources', (req, res) => {
   const db = getDb();
-  const body = req.body as Partial<ResourceItem>;
+  if (authenticatedUser(req, db)?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can create resources.' });
+    return;
+  }
+  const {
+    attachmentDataUrl,
+    attachmentFileName,
+    attachment: _submittedAttachment,
+    ...body
+  } = req.body as ResourceWriteBody;
   if (!body.title || !body.division) {
     res.status(400).json({ error: 'Title and division are required.' });
     return;
+  }
+  let attachment: ResourceAttachment | undefined;
+  if (attachmentDataUrl || attachmentFileName) {
+    const stored = storeResourceAttachment(attachmentFileName, attachmentDataUrl);
+    if ('error' in stored) {
+      res.status(stored.status).json({ error: stored.error });
+      return;
+    }
+    attachment = stored.attachment;
   }
   const item: ResourceItem = {
     id: `res-${Date.now()}`,
@@ -576,33 +815,142 @@ app.post('/api/resources', (req, res) => {
     authorName: body.authorName || 'KWAN Curriculum Team',
     approved: body.approved ?? true,
     downloads: 0,
+    attachment,
   };
   db.resources.unshift(item);
   saveDb(db);
   res.status(201).json({ resource: item, state: db });
 });
 
+app.get('/api/resources/:id/file', (req, res) => {
+  const db = getDb();
+  const resource = db.resources.find((item) => item.id === req.params.id);
+  if (!resource?.attachment) {
+    res.status(404).json({ error: 'Resource file not found.' });
+    return;
+  }
+  const user = authenticatedUser(req, db);
+  if (!user) {
+    res.status(401).json({ error: 'Sign in to access resource files.' });
+    return;
+  }
+  if (
+    user.role !== 'admin' &&
+    (!resource.approved ||
+      (resource.accessType === 'paid' && !user.purchasedResourceIds.includes(resource.id)))
+  ) {
+    res.status(403).json({ error: 'Purchase or obtain approval for this resource before downloading it.' });
+    return;
+  }
+
+  const fileId = resource.attachment.fileId;
+  if (!/^[a-f0-9]{32}$/.test(fileId)) {
+    res.status(404).json({ error: 'Resource file is unavailable.' });
+    return;
+  }
+  const filePath = path.join(RESOURCE_FILES_DIR, fileId);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'Resource file is unavailable.' });
+    return;
+  }
+
+  const headerName = resource.attachment.fileName;
+  const fallbackName = headerName.replace(/[^\x20-\x7e]|["\\;]/g, '_');
+  res.setHeader('Content-Type', resource.attachment.mimeType);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(headerName)}`
+  );
+  res.setHeader('X-Resource-Filename', encodeURIComponent(headerName));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  resource.downloads += 1;
+  saveDb(db);
+
+  const stream = fs.createReadStream(filePath);
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to read the resource file.' });
+    else res.destroy();
+  });
+  stream.pipe(res);
+});
+
 app.patch('/api/resources/:id', (req, res) => {
   const db = getDb();
+  if (authenticatedUser(req, db)?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can update resources.' });
+    return;
+  }
   const idx = db.resources.findIndex((r) => r.id === req.params.id);
   if (idx === -1) {
     res.status(404).json({ error: 'Resource not found.' });
     return;
   }
-  db.resources[idx] = { ...db.resources[idx], ...(req.body as Partial<ResourceItem>) };
+  const {
+    attachmentDataUrl,
+    attachmentFileName,
+    removeAttachment,
+    attachment: _submittedAttachment,
+    ...updates
+  } = req.body as ResourceWriteBody;
+  const previousAttachment = db.resources[idx].attachment;
+  let nextAttachment = previousAttachment;
+  if (attachmentDataUrl || attachmentFileName) {
+    const stored = storeResourceAttachment(attachmentFileName, attachmentDataUrl);
+    if ('error' in stored) {
+      res.status(stored.status).json({ error: stored.error });
+      return;
+    }
+    nextAttachment = stored.attachment;
+  } else if (removeAttachment) {
+    nextAttachment = undefined;
+  }
+  db.resources[idx] = {
+    ...db.resources[idx],
+    ...updates,
+    attachment: nextAttachment,
+  };
   saveDb(db);
+  if (previousAttachment && previousAttachment.fileId !== nextAttachment?.fileId) {
+    removeResourceAttachment(previousAttachment);
+  }
   res.json({ resource: db.resources[idx], state: db });
+});
+
+app.delete('/api/resources/:id', (req, res) => {
+  const db = getDb();
+  if (authenticatedUser(req, db)?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can delete resources.' });
+    return;
+  }
+  const resourceExists = db.resources.some((resource) => resource.id === req.params.id);
+  if (!resourceExists) {
+    res.status(404).json({ error: 'Resource not found.' });
+    return;
+  }
+  const resourceToDelete = db.resources.find((item) => item.id === req.params.id);
+  db.resources = db.resources.filter((item) => item.id !== req.params.id);
+  for (const user of db.users) {
+    user.purchasedResourceIds = user.purchasedResourceIds.filter((id) => id !== req.params.id);
+  }
+  saveDb(db);
+  removeResourceAttachment(resourceToDelete?.attachment);
+  res.json({ state: db });
 });
 
 // User / Tutor / Student Management
 app.patch('/api/users/:id', (req, res) => {
   const db = getDb();
+  if (authenticatedUser(req, db)?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can manage user accounts.' });
+    return;
+  }
   const idx = db.users.findIndex((u) => u.id === req.params.id);
   if (idx === -1) {
     res.status(404).json({ error: 'User not found.' });
     return;
   }
-  db.users[idx] = { ...db.users[idx], ...(req.body as Partial<UserAccount>) };
+  const { password: _password, ...updates } = req.body as Partial<UserAccount>;
+  db.users[idx] = { ...db.users[idx], ...updates };
   saveDb(db);
   res.json({ user: db.users[idx], state: db });
 });
@@ -746,8 +1094,24 @@ app.patch('/api/settings', (req, res) => {
 });
 
 async function startServer() {
-  const PORT = 3000;
+  const preferredPort = Number(process.env.PORT || 3000);
   const httpServer = http.createServer(app);
+
+  const listenOnPort = (port: number) => {
+    httpServer.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE' && port < preferredPort + 10) {
+        const nextPort = port + 1;
+        console.warn(`Port ${port} is busy. Retrying on ${nextPort}.`);
+        listenOnPort(nextPort);
+        return;
+      }
+      throw error;
+    });
+
+    httpServer.listen(port, '0.0.0.0', () => {
+      console.log(`KWAN Education Platform running on http://0.0.0.0:${port}`);
+    });
+  };
 
   if (process.env.NODE_ENV !== 'production') {
     const viteReady = import('vite').then(({ createServer }) =>
@@ -776,9 +1140,7 @@ async function startServer() {
     });
   }
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`KWAN Education Platform running on http://0.0.0.0:${PORT}`);
-  });
+  listenOnPort(preferredPort);
 }
 
 startServer();

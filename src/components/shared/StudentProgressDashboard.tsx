@@ -81,7 +81,7 @@ function CompletionTooltip({
     <div className="bg-stone-900/95 backdrop-blur-md text-white border border-white/15 rounded-xl px-3.5 py-2.5 text-xs shadow-lift space-y-1 max-w-xs">
       <p className="font-bold text-white">{item.courseTitle}</p>
       <p className="text-slate-200">
-        Completion: <strong className="font-mono-tabular text-[#f28c28]">{item.completionRate}%</strong>
+        Completion: <strong className="font-mono-tabular text-[#10B981]">{item.completionRate}%</strong>
       </p>
       <p className="text-slate-300 font-mono-tabular">
         {item.completedLessons} / {item.totalLessons} lessons finished
@@ -127,10 +127,10 @@ const DIVISION_PALETTES: Record<
   }
 > = {
   primary: {
-    primaryBar: '#f28c28',
+    primaryBar: '#10B981',
     secondaryBar: '#10b981',
     scoreLine: '#2bb673',
-    thresholdLine: '#f28c28',
+    thresholdLine: '#10B981',
     cardClass: 'glass-card border-2 border-amber-200/80 rounded-2xl',
     headingFontClass: 'font-kids font-bold text-[#292524]',
     completionHeading: 'Subject Completion Progress',
@@ -138,7 +138,7 @@ const DIVISION_PALETTES: Record<
   },
   lower_secondary: {
     primaryBar: '#0f766e',
-    secondaryBar: '#f28c28',
+    secondaryBar: '#10B981',
     scoreLine: '#0f766e',
     thresholdLine: '#2bb673',
     cardClass: 'glass-card rounded-2xl',
@@ -148,8 +148,8 @@ const DIVISION_PALETTES: Record<
   },
   upper_secondary: {
     primaryBar: '#18181b',
-    secondaryBar: '#f28c28',
-    scoreLine: '#f28c28',
+    secondaryBar: '#10B981',
+    scoreLine: '#10B981',
     thresholdLine: '#18181b',
     cardClass: 'glass-card rounded-xl',
     headingFontClass: 'font-editorial font-semibold text-stone-900',

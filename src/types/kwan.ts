@@ -8,15 +8,15 @@ export type ClassLevel = PrimaryClass | LowerSecondaryClass | UpperSecondaryClas
 export type UserRole = 'student' | 'tutor' | 'admin';
 export type UpperSecondaryStream = 'Sciences' | 'Arts';
 
-export type PublicPageId = 'home' | 'about' | 'blog' | 'resources' | 'get_started' | 'login';
+export type PublicPageId = string;
 
-export type CmsEditablePageId = 'home' | 'about' | 'blog' | 'resources' | 'get_started';
+export type CmsEditablePageId = string;
 
 export interface UserAccount {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   role: UserRole;
   division?: DivisionId;
   classLevel?: ClassLevel;
@@ -201,6 +201,14 @@ export interface ResourceItem {
   authorName: string;
   approved: boolean;
   downloads: number;
+  attachment?: ResourceAttachment;
+}
+
+export interface ResourceAttachment {
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export interface Transaction {
@@ -249,7 +257,8 @@ export interface WebsiteSection {
     | 'promo_banner'
     | 'mission_pillars'
     | 'testimonials'
-    | 'cta_band';
+    | 'cta_band'
+    | 'content';
   heading: string;
   subheading: string;
   bodyText: string;
@@ -280,7 +289,7 @@ export interface WebsiteConfig {
     location: string;
     copyright: string;
   };
-  pages: Record<CmsEditablePageId, WebsiteSection[]>;
+  pages: Record<string, WebsiteSection[]>;
 }
 
 export interface WebsiteVersionSnapshot {

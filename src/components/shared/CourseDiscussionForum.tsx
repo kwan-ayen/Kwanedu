@@ -63,7 +63,7 @@ const FORUM_THEME: Record<
   primary: {
     surface: 'glass-card border-2 border-amber-200/80 rounded-2xl',
     headingFont: 'font-kids font-bold text-[#292524]',
-    primaryBtn: 'bg-[#f28c28] text-slate-950 hover:bg-[#e07d1b] rounded-xl',
+    primaryBtn: 'bg-[#10B981] text-white hover:bg-[#059669] rounded-xl',
     activeItem: 'bg-amber-50/85 border-amber-500',
     title: 'Primary Class Q&A Forum',
     subtitle: 'Ask your teacher a question about any lesson or activity topic.',

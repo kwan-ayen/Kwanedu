@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { PlatformState } from '../src/types/kwan.ts';
 import { createSeedData } from './seedData.ts';
+import { hashPassword, isPasswordHash } from './auth.ts';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'kwan-db.json');
@@ -23,6 +24,23 @@ export function getDb(): PlatformState {
       const rawRecord = parsed as unknown as Record<string, unknown>;
       let mutated = false;
 
+      for (const user of parsed.users || []) {
+        if (user.role === 'admin') {
+          if (user.name !== 'Ayen Geoffrey Alexander') {
+            user.name = 'Ayen Geoffrey Alexander';
+            mutated = true;
+          }
+          if (user.password === 'kwan') {
+            user.password = '';
+            mutated = true;
+          }
+        }
+        if (user.password && !isPasswordHash(user.password)) {
+          user.password = hashPassword(user.password);
+          mutated = true;
+        }
+      }
+
       if ('certificates' in rawRecord || 'certificateTemplates' in rawRecord) {
         delete rawRecord.certificates;
         delete rawRecord.certificateTemplates;
@@ -37,14 +55,9 @@ export function getDb(): PlatformState {
 
       const sanitizeWebsiteConfig = (cfg: typeof parsed.cmsPublished | undefined) => {
         if (!cfg) return;
-        if (
-          cfg.theme &&
-          (cfg.theme.primaryAccent === '#0F4C81' || cfg.theme.primaryAccent === '#13568c')
-        ) {
-          cfg.theme.primaryAccent = '#bae6fd';
-          cfg.theme.secondaryAccent = '#f28c28';
-          cfg.theme.headingFont = 'Bricolage Grotesque';
-          cfg.theme.bodyFont = 'Figtree';
+        if (cfg.theme?.primaryAccent === '#bae6fd' && cfg.theme.secondaryAccent === '#f28c28') {
+          cfg.theme.primaryAccent = '#0F4C81';
+          cfg.theme.secondaryAccent = '#10B981';
           mutated = true;
         }
         if (!cfg.pages) return;
@@ -54,14 +67,15 @@ export function getDb(): PlatformState {
           for (const sec of sections) {
             const bg = (sec.backgroundColor || '').toLowerCase();
             if (
+              bg === '#f6f5f0' ||
               bg === '#0b2545' ||
               bg === '#0f172a' ||
               bg === '#f8fafc' ||
               bg === '#f4f7fb' ||
               bg === '#ffffff'
             ) {
-              sec.backgroundColor = '#f6f5f0';
-              sec.textColor = '#0f172a';
+              sec.backgroundColor = '#F4F7F6';
+              sec.textColor = '#0A2540';
               mutated = true;
             }
             if ((sec.ctaTarget as string) === 'verify') {

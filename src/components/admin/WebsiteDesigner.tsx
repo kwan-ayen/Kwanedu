@@ -56,6 +56,8 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [newPageTitle, setNewPageTitle] = useState('');
+  const [newSectionType, setNewSectionType] = useState<WebsiteSection['type']>('content');
 
   // Promotional Banner Upload State
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -74,6 +76,7 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
 
   const sections = draft.pages[activePage] || [];
   const selectedSection = sections.find((s) => s.id === selectedSectionId) || sections[0];
+  const pageLabel = draft.navItems.find((item) => item.id === activePage)?.label || activePage;
 
   const notifyStatus = (msg: string) => {
     setErrorMessage('');
@@ -86,9 +89,70 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
       ...prev,
       pages: {
         ...prev.pages,
-        [activePage]: prev.pages[activePage].map((s) => (s.id === sectionId ? { ...s, ...patch } : s)),
+        [activePage]: (prev.pages[activePage] || []).map((s) => (s.id === sectionId ? { ...s, ...patch } : s)),
       },
     }));
+  };
+
+  const createPage = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const label = newPageTitle.trim();
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!label || !slug) {
+      setErrorMessage('Enter a page title using letters or numbers.');
+      return;
+    }
+    if (['home', 'about', 'blog', 'resources', 'get_started', 'login'].includes(slug)) {
+      setErrorMessage('That page name is reserved. Choose a different title.');
+      return;
+    }
+    if (draft.pages[slug]) {
+      setErrorMessage('A page with that URL already exists. Choose a different title.');
+      return;
+    }
+    setErrorMessage('');
+    setDraft((prev) => ({
+      ...prev,
+      pages: { ...prev.pages, [slug]: [] },
+      navItems: [...prev.navItems, { id: slug, label }],
+    }));
+    setActivePage(slug);
+    setSelectedSectionId('');
+    setNewPageTitle('');
+  };
+
+  const deletePage = (pageId: string) => {
+    if (['home', 'about', 'blog', 'resources', 'get_started'].includes(pageId)) return;
+    if (!window.confirm(`Delete the "${pageId}" page and all of its sections?`)) return;
+    setDraft((prev) => {
+      const pages = { ...prev.pages };
+      delete pages[pageId];
+      for (const [key, pageSections] of Object.entries(pages)) {
+        pages[key] = pageSections.map((section) => ({
+          ...section,
+          ctaTarget: section.ctaTarget === pageId ? 'home' : section.ctaTarget,
+          slides: section.slides?.map((slide) => ({
+            ...slide,
+            ctaTarget: slide.ctaTarget === pageId ? 'home' : slide.ctaTarget,
+          })),
+        }));
+      }
+      return {
+        ...prev,
+        pages,
+        navItems: prev.navItems.filter((item) => item.id !== pageId),
+      };
+    });
+    if (activePage === pageId) {
+      setActivePage('home');
+      setSelectedSectionId(draft.pages.home?.[0]?.id || '');
+    }
+  };
+
+  const deleteSection = (sectionId: string) => {
+    const nextSections = sections.filter((section) => section.id !== sectionId);
+    setDraft((prev) => ({ ...prev, pages: { ...prev.pages, [activePage]: nextSections } }));
+    if (selectedSectionId === sectionId) setSelectedSectionId(nextSections[0]?.id || '');
   };
 
   const moveSection = (index: number, delta: -1 | 1) => {
@@ -205,14 +269,14 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
       bodyText: 'Edit this section text, colours, button label, and image using the design controls.',
       ctaLabel: 'Get Started',
       ctaTarget: 'get_started',
-      backgroundColor: type === 'promo_banner' ? '#faf7f0' : '#f6f5f0',
+      backgroundColor: type === 'promo_banner' ? '#faf7f0' : '#F4F7F6',
       textColor: '#0f172a',
       imageUrl: mediaLibrary[0]?.url || FALLBACK_GALLERY[0].url,
       visible: true,
     };
     setDraft((prev) => ({
       ...prev,
-      pages: { ...prev.pages, [activePage]: [...prev.pages[activePage], newSec] },
+      pages: { ...prev.pages, [activePage]: [...(prev.pages[activePage] || []), newSec] },
     }));
     setSelectedSectionId(newSec.id);
   };
@@ -240,31 +304,54 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
 
   return (
     <div className="space-y-6">
+      <form onSubmit={createPage} className="glass-card rounded-xl p-4 flex flex-wrap items-end gap-3">
+        <div className="flex-1 min-w-48">
+          <label htmlFor="new-cms-page" className="block text-xs font-semibold text-slate-700 mb-1.5">
+            Create website page
+          </label>
+          <input
+            id="new-cms-page"
+            value={newPageTitle}
+            onChange={(event) => setNewPageTitle(event.target.value)}
+            placeholder="e.g. Admissions, Contact, About Our Tutors"
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+          />
+        </div>
+        <button type="submit" className="px-4 py-2 text-sm font-semibold text-white bg-[#10B981] rounded-lg hover:bg-[#059669]">
+          <Plus className="w-4 h-4 inline mr-1" /> Create Page
+        </button>
+      </form>
+
       {/* Top Designer Toolbar */}
       <div className="glass-card rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              { id: 'home', label: 'Home' },
-              { id: 'about', label: 'About Us' },
-              { id: 'blog', label: 'Blog' },
-              { id: 'resources', label: 'Resources' },
-              { id: 'get_started', label: 'Get Started' },
-            ] as const
-          ).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                setActivePage(p.id);
-                setSelectedSectionId(draft.pages[p.id][0]?.id || '');
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap ${
-                activePage === p.id ? 'bg-slate-900 text-white' : 'bg-white/75 text-slate-700 hover:bg-white'
-              }`}
-            >
-              {p.label}
-            </button>
+          {Object.keys(draft.pages).map((pageId) => (
+            <div key={pageId} className="flex items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePage(pageId);
+                  setSelectedSectionId(draft.pages[pageId]?.[0]?.id || '');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-l-lg whitespace-nowrap ${
+                  activePage === pageId ? 'bg-[#0F4C81] text-white' : 'bg-white/75 text-slate-700 hover:bg-white'
+                }`}
+              >
+                {draft.navItems.find((item) => item.id === pageId)?.label || pageId}
+              </button>
+              {!['home', 'about', 'blog', 'resources', 'get_started'].includes(pageId) && (
+                <button
+                  type="button"
+                  title={`Delete ${pageId} page`}
+                  onClick={() => deletePage(pageId)}
+                  className={`px-2 py-1.5 text-xs rounded-r-lg ${
+                    activePage === pageId ? 'bg-[#0F4C81] text-white hover:bg-red-700' : 'bg-white/75 text-red-600 hover:bg-red-50'
+                  }`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
 
@@ -315,7 +402,7 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
           <button
             type="button"
             onClick={handlePublish}
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-[#f28c28] rounded-lg hover:bg-[#e07d1b] flex items-center gap-1.5 whitespace-nowrap shadow-soft"
+            className="px-4 py-2 text-xs font-semibold text-white bg-[#10B981] rounded-lg hover:bg-[#059669] flex items-center gap-1.5 whitespace-nowrap shadow-soft"
           >
             <UploadCloud className="w-3.5 h-3.5" /> Publish Live
           </button>
@@ -368,8 +455,37 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
           {/* Section Order & Add */}
           <div className="glass-card rounded-xl p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Page Sections ({activePage})</h3>
+              <h3 className="text-sm font-bold text-slate-900">Page Sections ({pageLabel})</h3>
               <div className="flex items-center gap-1">
+                <select
+                  aria-label="New section type"
+                  value={newSectionType}
+                  onChange={(event) => setNewSectionType(event.target.value as WebsiteSection['type'])}
+                  className="max-w-40 px-2 py-1.5 text-xs border border-slate-200 rounded bg-white"
+                >
+                  <option value="content">Text content</option>
+                  <option value="hero">Hero banner</option>
+                  <option value="divisions">Learning divisions</option>
+                  <option value="featured_courses">Featured courses</option>
+                  <option value="promo_banner">Promotion / CTA</option>
+                  <option value="mission_pillars">Mission pillars</option>
+                  <option value="testimonials">Testimonials</option>
+                  <option value="cta_band">Call to action</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => addSection(newSectionType)}
+                  className="px-2.5 py-1 text-xs font-semibold bg-[#0F4C81] text-white rounded flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Plus className="w-3 h-3" /> Add Section
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addSection('content')}
+                  className="px-2.5 py-1 text-xs font-semibold bg-white/75 hover:bg-white border border-slate-200 rounded flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Plus className="w-3 h-3" /> Text
+                </button>
                 <button
                   type="button"
                   onClick={() => addSection('featured_courses')}
@@ -385,6 +501,24 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                   <Plus className="w-3 h-3" /> Banner
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Navigation label</label>
+              <input
+                type="text"
+                value={pageLabel}
+                onChange={(event) => {
+                  const label = event.target.value;
+                  setDraft((prev) => ({
+                    ...prev,
+                    navItems: prev.navItems.some((item) => item.id === activePage)
+                      ? prev.navItems.map((item) => item.id === activePage ? { ...item, label } : item)
+                      : [...prev.navItems, { id: activePage, label }],
+                  }));
+                }}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+              />
             </div>
 
             <div className="space-y-2">
@@ -428,6 +562,14 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                     >
                       {sec.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 text-red-500" />}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteSection(sec.id)}
+                      className="p-1 text-red-500 hover:text-red-700"
+                      title="Delete section"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -465,7 +607,7 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Button Label</label>
                   <input
@@ -474,6 +616,20 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                     onChange={(e) => updateSection(selectedSection.id, { ctaLabel: e.target.value })}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Button Destination</label>
+                  <select
+                    value={selectedSection.ctaTarget}
+                    onChange={(e) => updateSection(selectedSection.id, { ctaTarget: e.target.value })}
+                    className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                  >
+                    {Object.keys(draft.pages).map((pageId) => (
+                      <option key={pageId} value={pageId}>
+                        {draft.navItems.find((item) => item.id === pageId)?.label || pageId}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Fallback Image Asset</label>
@@ -876,10 +1032,11 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                               }
                               className="px-2 py-1.5 text-xs border border-slate-300 rounded bg-white"
                             >
-                              <option value="get_started">Get Started</option>
-                              <option value="resources">Resources</option>
-                              <option value="blog">Blog</option>
-                              <option value="about">About Us</option>
+                              {Object.keys(draft.pages).map((pageId) => (
+                                <option key={pageId} value={pageId}>
+                                  {draft.navItems.find((item) => item.id === pageId)?.label || pageId}
+                                </option>
+                              ))}
                             </select>
                             <select
                               value={slide.divisionParam || ''}
@@ -914,7 +1071,7 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
             <h3 className="text-sm font-bold text-slate-900">Brand Theme, Fonts &amp; Footer</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Header &amp; Footer Light Blue</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Header / Brand Blue</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -1022,18 +1179,17 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
               width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
               maxWidth: '100%',
               fontFamily: draft.theme.bodyFont,
-            }}
+              '--brand-primary': draft.theme.primaryAccent,
+              '--brand-accent': draft.theme.secondaryAccent,
+            } as React.CSSProperties}
           >
-            {/* Preview Top Bar (Light-Blue Glassmorphism) */}
-            <div className="px-5 py-3 glass-header-footer border-b border-sky-200/70 flex items-center justify-between gap-4">
+            <div className="px-5 py-3 glass-header-footer border-b border-[#1D5E96] text-white flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md bg-gradient-brand text-slate-950 text-xs font-bold flex items-center justify-center border border-white/80">
-                  K
-                </span>
-                <span className="text-base font-bold text-slate-950">{draft.brandName}</span>
+                <img src="/kwan-mark.svg" alt="" aria-hidden="true" className="w-6 h-6 rounded-md" />
+                <span className="text-base font-bold text-white">{draft.brandName}</span>
               </div>
               {viewport !== 'mobile' && (
-                <div className="flex items-center gap-4 text-xs font-medium text-slate-800">
+                <div className="flex items-center gap-4 text-xs font-medium text-[#E2E8F0]">
                   {draft.navItems.map((n) => (
                     <span key={n.id} className="whitespace-nowrap">
                       {n.label}
@@ -1115,10 +1271,9 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                 ))}
             </div>
 
-            {/* Preview Footer (Light-Blue Glassmorphism) */}
-            <div className="px-5 py-4 glass-header-footer border-t border-sky-200/70 text-slate-800 text-[11px] flex flex-wrap justify-between gap-2">
+            <div className="px-5 py-4 bg-[#0A2540] border-t border-[#163A5F] text-[#CBD5E1] text-[11px] flex flex-wrap justify-between gap-2">
               <span className="font-medium">{draft.footer.tagline}</span>
-              <span className="text-slate-950 font-semibold">{draft.footer.contactEmail}</span>
+              <span className="text-white font-semibold">{draft.footer.contactEmail}</span>
             </div>
           </div>
         </div>

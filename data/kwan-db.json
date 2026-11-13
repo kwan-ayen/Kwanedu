@@ -146,7 +146,7 @@
       "email": "nakato.tutor@kwan.ac.ug",
       "password": "kwan",
       "role": "tutor",
-      "approved": false,
+      "approved": true,
       "assignedCourseIds": [],
       "enrolledCourseIds": [],
       "purchasedResourceIds": [],
@@ -848,7 +848,7 @@
       "description": "Ten high-yield optimisation and integration seminar questions with rubric notes.",
       "previewContent": "Contains structured differential equations and volume of revolution derivations.",
       "authorName": "KWAN Senior Mathematics Panel",
-      "approved": false,
+      "approved": true,
       "downloads": 41
     }
   ],
@@ -865,7 +865,7 @@
       "commissionUGX": 10500,
       "tutorNetUGX": 24500,
       "method": "MTN Mobile Money",
-      "status": "completed",
+      "status": "refunded",
       "createdAt": "2026-11-01 11:12"
     },
     {
@@ -880,7 +880,7 @@
       "commissionUGX": 16500,
       "tutorNetUGX": 38500,
       "method": "Airtel Money",
-      "status": "completed",
+      "status": "refunded",
       "createdAt": "2026-11-03 15:40"
     },
     {
@@ -895,7 +895,7 @@
       "commissionUGX": 4500,
       "tutorNetUGX": 10500,
       "method": "MTN Mobile Money",
-      "status": "completed",
+      "status": "refunded",
       "createdAt": "2026-11-05 09:05"
     },
     {
@@ -910,7 +910,7 @@
       "commissionUGX": 28500,
       "tutorNetUGX": 66500,
       "method": "Card",
-      "status": "completed",
+      "status": "refunded",
       "createdAt": "2026-11-06 17:22"
     }
   ],
@@ -1096,33 +1096,64 @@
           "visible": true
         }
       ],
-      "resources": [
-        {
-          "id": "resources-hero",
-          "type": "hero",
-          "heading": "Approved Study Notes, Lab Guides & Past Paper Packs",
-          "subheading": "Free and paid academic resources organised by division and class level.",
-          "bodyText": "All resources are reviewed by KWAN administrators before publication and delivered directly into your learner library upon purchase.",
-          "ctaLabel": "Login to Library",
-          "ctaTarget": "login",
-          "backgroundColor": "#f6f5f0",
-          "textColor": "#0f172a",
-          "imageUrl": "/src/assets/images/division_lower_secondary_1794577152479.jpg",
-          "visible": true
-        }
-      ],
+      "resources": [],
       "get_started": [
         {
           "id": "gs-hero",
           "type": "hero",
           "heading": "Choose Your Academic Division to Begin",
-          "subheading": "Select Primary (P.4–P.7), Lower Secondary (S.1–S.4), or Upper Secondary (S.5–S.6).",
+          "subheading": "",
           "bodyText": "Your account connects directly to the right learning environment, permitted courses, and personalised progress dashboard.",
           "ctaLabel": "Already Have an Account?",
           "ctaTarget": "login",
           "backgroundColor": "#f6f5f0",
           "textColor": "#0f172a",
           "imageUrl": "/src/assets/images/division_primary_1794577152032.jpg",
+          "visible": true,
+          "slides": [
+            {
+              "id": "slide-1794604630343",
+              "imageUrl": "/uploads/banner-1794604621803-Senior_Five_Mathematics_Holiday_Package.png",
+              "divisionLabel": "Promotional Banner",
+              "title": "Senior Five Mathematics Holiday Package",
+              "caption": "New uploaded promotional campaign banner—edit headline, caption, and action button.",
+              "ctaLabel": "Get Started",
+              "ctaTarget": "get_started",
+              "active": true
+            },
+            {
+              "id": "slide-1794604639164",
+              "imageUrl": "/uploads/banner-1794604621803-Senior_Five_Mathematics_Holiday_Package.png",
+              "divisionLabel": "Promotional Highlight",
+              "title": "Senior Five Mathematics Holiday Package",
+              "caption": "Featured KWAN academic campaign banner.",
+              "ctaLabel": "Get Started",
+              "ctaTarget": "get_started",
+              "active": false
+            },
+            {
+              "id": "slide-1794604654173",
+              "imageUrl": "/src/assets/images/hero_kwan_learning_1794577150584.jpg",
+              "divisionLabel": "Promotional Highlight",
+              "title": "Sunlit KWAN Library Banner",
+              "caption": "Featured KWAN academic campaign banner.",
+              "ctaLabel": "Get Started",
+              "ctaTarget": "get_started",
+              "active": true
+            }
+          ]
+        },
+        {
+          "id": "sec-1794604675050",
+          "type": "featured_courses",
+          "heading": "Featured Academic Courses",
+          "subheading": "Designed directly in KWAN Website Management.",
+          "bodyText": "Edit this section text, colours, button label, and image using the design controls.",
+          "ctaLabel": "Get Started",
+          "ctaTarget": "get_started",
+          "backgroundColor": "#F4F7F6",
+          "textColor": "#0f172a",
+          "imageUrl": "/uploads/banner-1794604621803-Senior_Five_Mathematics_Holiday_Package.png",
           "visible": true
         }
       ]
@@ -1344,6 +1375,226 @@
   },
   "cmsHistory": [
     {
+      "id": "ver-1794603604902",
+      "label": "Published Update (2026-11-13 21:00)",
+      "savedAt": "2026-11-13 21:00",
+      "savedBy": "Dr. Mugisha Harriet",
+      "config": {
+        "brandName": "KWAN",
+        "navItems": [
+          {
+            "id": "home",
+            "label": "Home"
+          },
+          {
+            "id": "about",
+            "label": "About Us"
+          },
+          {
+            "id": "blog",
+            "label": "Blog"
+          },
+          {
+            "id": "resources",
+            "label": "Resources"
+          },
+          {
+            "id": "get_started",
+            "label": "Get Started"
+          },
+          {
+            "id": "login",
+            "label": "Login"
+          }
+        ],
+        "theme": {
+          "primaryAccent": "#bae6fd",
+          "secondaryAccent": "#f28c28",
+          "headingFont": "Bricolage Grotesque",
+          "bodyFont": "Figtree",
+          "buttonStyle": "rounded-lg"
+        },
+        "footer": {
+          "tagline": "One unified academic institution serving Primary (P.4–P.7), Lower Secondary (S.1–S.4), and Upper Secondary (S.5–S.6) learners across Uganda.",
+          "contactEmail": "admissions@kwan.ac.ug",
+          "location": "Kampala Academic Hub · Uganda",
+          "copyright": "© 2026 KWAN Education Platform. All rights reserved."
+        },
+        "pages": {
+          "home": [
+            {
+              "id": "home-hero",
+              "type": "hero",
+              "heading": "Learn. Grow. Achieve.",
+              "subheading": "Quality education for every stage of your learning journey.",
+              "bodyText": "KWAN delivers three purpose-built learning environments under one unified platform—tailored for Primary (P.4–P.7), Lower Secondary (S.1–S.4), and Upper Secondary (S.5–S.6) learners.",
+              "ctaLabel": "Get Started",
+              "ctaTarget": "get_started",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "imageUrl": "/src/assets/images/hero_kwan_learning_1794577150584.jpg",
+              "visible": true,
+              "slides": [
+                {
+                  "id": "slide-1",
+                  "imageUrl": "/src/assets/images/hero_kwan_learning_1794577150584.jpg",
+                  "divisionLabel": "Unified KWAN Platform",
+                  "title": "2026 Admissions Open Across All Three Divisions",
+                  "caption": "One school brand connecting Primary, Lower Secondary, and Upper Secondary.",
+                  "ctaLabel": "Get Started Now",
+                  "ctaTarget": "get_started",
+                  "active": true
+                },
+                {
+                  "id": "slide-2",
+                  "imageUrl": "/src/assets/images/division_primary_1794577152032.jpg",
+                  "divisionLabel": "Primary Education · P.4 – P.7",
+                  "title": "Visual Classroom & Fraction Labs",
+                  "caption": "Illustrated lessons, interactive Fraction Labs, stars, and guardian updates.",
+                  "ctaLabel": "Explore Primary",
+                  "ctaTarget": "get_started",
+                  "divisionParam": "primary",
+                  "active": true
+                },
+                {
+                  "id": "slide-3",
+                  "imageUrl": "/src/assets/images/division_lower_secondary_1794577152479.jpg",
+                  "divisionLabel": "Lower Secondary · S.1 – S.4",
+                  "title": "Structured O-Level Curriculum & Clinics",
+                  "caption": "Structured O-Level curriculum modules, science labs, and red & green pen marking.",
+                  "ctaLabel": "Explore Lower Secondary",
+                  "ctaTarget": "get_started",
+                  "divisionParam": "lower_secondary",
+                  "active": true
+                },
+                {
+                  "id": "slide-4",
+                  "imageUrl": "/src/assets/images/division_upper_secondary_1794577153179.jpg",
+                  "divisionLabel": "Upper Secondary · S.5 – S.6",
+                  "title": "A-Level Combinations & Research Seminars",
+                  "caption": "Sciences & Arts subject combinations, research projects, and detailed rubrics.",
+                  "ctaLabel": "Choose Combination",
+                  "ctaTarget": "get_started",
+                  "divisionParam": "upper_secondary",
+                  "active": true
+                }
+              ],
+              "sliderAutoplay": true,
+              "sliderIntervalSeconds": 5
+            },
+            {
+              "id": "home-divisions",
+              "type": "divisions",
+              "heading": "Three Academic Divisions. Three Tailored Learning Environments.",
+              "subheading": "Every learner enters a classroom designed specifically for their class level and academic goals.",
+              "bodyText": "From illustrated, activity-led Primary lessons to structured Lower Secondary exam preparation and independent Upper Secondary subject combinations.",
+              "ctaLabel": "Choose Your Division",
+              "ctaTarget": "get_started",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "visible": true
+            },
+            {
+              "id": "home-featured",
+              "type": "featured_courses",
+              "heading": "Featured Curriculum Courses",
+              "subheading": "Approved courses taught by vetted Ugandan educators, matched strictly to target class permissions.",
+              "bodyText": "Explore free foundational courses and structured paid programmes across Mathematics, Sciences, English, and Humanities.",
+              "ctaLabel": "Browse Resources",
+              "ctaTarget": "resources",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "visible": true
+            },
+            {
+              "id": "home-promo",
+              "type": "promo_banner",
+              "heading": "Term III National Revision & Mock Clinics Now Open",
+              "subheading": "Structured past-paper seminars and red-and-green pen tutor marking for P.7, S.4, and S.6 candidates.",
+              "bodyText": "Enrol through your KWAN student account to access interactive lessons, practice quizzes, and detailed tutor feedback.",
+              "ctaLabel": "Get Started Today",
+              "ctaTarget": "get_started",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "visible": true
+            }
+          ],
+          "about": [
+            {
+              "id": "about-hero",
+              "type": "hero",
+              "heading": "Built Around How Students Actually Progress From P.4 to S.6",
+              "subheading": "One institution, connected administration, and age-authentic classrooms.",
+              "bodyText": "A Primary 5 pupil should never navigate the same interface as an S.6 Physics and Mathematics candidate. KWAN separates the learning interface, assessment format, and progression benchmarks for each division while uniting families, tutors, and administrators.",
+              "ctaLabel": "Select Your Class",
+              "ctaTarget": "get_started",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "imageUrl": "/src/assets/images/division_upper_secondary_1794577153179.jpg",
+              "visible": true
+            },
+            {
+              "id": "about-pillars",
+              "type": "mission_pillars",
+              "heading": "Our Educational Architecture",
+              "subheading": "Curriculum alignment, rigorous tutor feedback, and visual progress tracking.",
+              "bodyText": "KWAN combines age-authentic digital classrooms with live course completion analytics and tutor-marked feedback across every division.",
+              "ctaLabel": "Read Academic Blog",
+              "ctaTarget": "blog",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "visible": true
+            }
+          ],
+          "blog": [
+            {
+              "id": "blog-hero",
+              "type": "hero",
+              "heading": "KWAN Academic Journal & Announcements",
+              "subheading": "Study advice, examination strategies, science notes, and term announcements for learners and parents.",
+              "bodyText": "Published directly by KWAN curriculum heads and subject tutors.",
+              "ctaLabel": "Explore Courses",
+              "ctaTarget": "get_started",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "imageUrl": "/src/assets/images/blog_exam_prep_1794577153176.jpg",
+              "visible": true
+            }
+          ],
+          "resources": [
+            {
+              "id": "resources-hero",
+              "type": "hero",
+              "heading": "Approved Study Notes, Lab Guides & Past Paper Packs",
+              "subheading": "Free and paid academic resources organised by division and class level.",
+              "bodyText": "All resources are reviewed by KWAN administrators before publication and delivered directly into your learner library upon purchase.",
+              "ctaLabel": "Login to Library",
+              "ctaTarget": "login",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "imageUrl": "/src/assets/images/division_lower_secondary_1794577152479.jpg",
+              "visible": true
+            }
+          ],
+          "get_started": [
+            {
+              "id": "gs-hero",
+              "type": "hero",
+              "heading": "Choose Your Academic Division to Begin",
+              "subheading": "Select Primary (P.4–P.7), Lower Secondary (S.1–S.4), or Upper Secondary (S.5–S.6).",
+              "bodyText": "Your account connects directly to the right learning environment, permitted courses, and personalised progress dashboard.",
+              "ctaLabel": "Already Have an Account?",
+              "ctaTarget": "login",
+              "backgroundColor": "#f6f5f0",
+              "textColor": "#0f172a",
+              "imageUrl": "/src/assets/images/division_primary_1794577152032.jpg",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
       "id": "ver-1",
       "label": "Initial Unified Launch v1.0",
       "savedAt": "2026-11-01 08:00",
@@ -1526,6 +1777,14 @@
     "supportEmail": "admissions@kwan.ac.ug"
   },
   "cmsMedia": [
+    {
+      "id": "media-1794604621806",
+      "label": "Senior Five Mathematics Holiday Package",
+      "url": "/uploads/banner-1794604621803-Senior_Five_Mathematics_Holiday_Package.png",
+      "uploadedAt": "2026-11-13",
+      "uploadedBy": "Dr. Mugisha Harriet",
+      "fileSizeKB": 1263
+    },
     {
       "id": "media-1",
       "label": "Sunlit KWAN Library Banner",

@@ -118,9 +118,14 @@ export function formatUGX(amount: number): string {
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = sessionStorage.getItem('kwan_session_token');
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
   });
   const data = await res.json();
   if (!res.ok) {
@@ -129,15 +134,49 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return data as T;
 }
 
+async function fetchResourceFile(resourceId: string): Promise<{ blob: Blob; fileName: string }> {
+  const token = sessionStorage.getItem('kwan_session_token');
+  const response = await fetch(`/api/resources/${encodeURIComponent(resourceId)}/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    const data = (await response.json()) as { error?: string };
+    throw new Error(data.error || 'Unable to retrieve this resource file.');
+  }
+  const encodedName = response.headers.get('X-Resource-Filename');
+  let fileName = 'resource-download';
+  if (encodedName) {
+    try {
+      fileName = decodeURIComponent(encodedName);
+    } catch {
+      fileName = 'resource-download';
+    }
+  }
+  return { blob: await response.blob(), fileName };
+}
+
 export const api = {
   fetchState: () => request<PlatformState>('/api/state'),
+  getAdminSetupStatus: () =>
+    request<{ required: boolean; setupKeyConfigured: boolean }>('/api/auth/setup-status'),
+  setupAdmin: (setupKey: string, password: string) =>
+    request<{ user: UserAccount; sessionToken: string }>('/api/auth/setup-admin', {
+      method: 'POST',
+      body: JSON.stringify({ setupKey, password }),
+    }),
+  currentUser: () => request<{ user: UserAccount }>('/api/auth/me'),
   login: (email: string, password: string) =>
-    request<{ user: UserAccount }>('/api/auth/login', {
+    request<{ user: UserAccount; sessionToken: string }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
   register: (payload: Partial<UserAccount>) =>
-    request<{ user: UserAccount; state: PlatformState }>('/api/auth/register', {
+    request<{ user: UserAccount; state: PlatformState; sessionToken: string }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createTutor: (payload: { name: string; email: string; password: string }) =>
+    request<{ user: UserAccount; state: PlatformState }>('/api/admin/tutors', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -220,15 +259,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ authorName, text }),
     }),
-  createResource: (payload: Partial<ResourceItem>) =>
+  createResource: (
+    payload: Partial<ResourceItem> & {
+      attachmentDataUrl?: string;
+      attachmentFileName?: string;
+    }
+  ) =>
     request<{ state: PlatformState }>('/api/resources', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  updateResource: (id: string, payload: Partial<ResourceItem>) =>
+  updateResource: (
+    id: string,
+    payload: Partial<ResourceItem> & {
+      attachmentDataUrl?: string;
+      attachmentFileName?: string;
+      removeAttachment?: boolean;
+    }
+  ) =>
     request<{ state: PlatformState }>(`/api/resources/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    }),
+  fetchResourceFile,
+  deleteResource: (id: string) =>
+    request<{ state: PlatformState }>(`/api/resources/${id}`, {
+      method: 'DELETE',
     }),
   updateUser: (id: string, payload: Partial<UserAccount>) =>
     request<{ state: PlatformState }>(`/api/users/${id}`, {
