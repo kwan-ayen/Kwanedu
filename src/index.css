@@ -139,10 +139,15 @@
 
 /* Clean, consistent surfaces shared by the public site and workspaces. */
 @utility glass-header-footer {
-  background: var(--brand-primary, #0f4c81);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 3px rgba(10, 37, 64, 0.12), 0 8px 20px -16px rgba(10, 37, 64, 0.3);
+  background-color: #0a2540;
+  background-image:
+    radial-gradient(ellipse at 18% -45%, rgba(52, 211, 153, 0.18), transparent 48%),
+    linear-gradient(112deg, #0a2540 0%, #0f4c81 52%, #17669b 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    inset 0 -1px 0 rgba(191, 219, 254, 0.28),
+    0 4px 18px -8px rgba(10, 37, 64, 0.48);
 }
 
 @utility glass-card {

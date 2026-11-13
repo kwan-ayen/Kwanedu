@@ -153,6 +153,8 @@ npm run build
 
 Then you can serve the generated output with a static server or deploy using your preferred hosting platform. The project is structured so the UI and API can be hosted together through a Node-based deployment flow.
 
+For the complete production setup, persistent-storage requirements, and first-admin password creation, see the [Deployment Guide](./DEPLOYMENT_GUIDE.md).
+
 ## Common Troubleshooting
 
 ### `tsx: not found`
