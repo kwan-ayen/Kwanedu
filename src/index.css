@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-display: var(--brand-heading-font), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--brand-body-font), "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-kids: "Baloo 2", "Figtree", ui-rounded, system-ui, sans-serif;
+  --font-serif: "Fraunces", Georgia, serif;
+
+  --shadow-soft: 0 1px 2px color-mix(in oklab, var(--ink) 5%, transparent), 0 10px 28px -14px color-mix(in oklab, var(--ink) 12%, transparent);
+  --shadow-lift: 0 4px 10px color-mix(in oklab, var(--ink) 5%, transparent), 0 24px 48px -20px color-mix(in oklab, var(--ink) 18%, transparent);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 14px 36px -18px rgba(15, 23, 42, 0.14);
+  --shadow-glow: 0 16px 36px -14px color-mix(in oklab, var(--sunrise) 50%, transparent);
+  --shadow-kid: 0 5px 0 0 color-mix(in oklab, var(--kid-ink) 14%, transparent);
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-rise: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-pop: pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+@layer base {
+  :root {
+    --brand-primary: #bae6fd;
+    --brand-navy: #0f172a;
+    --brand-accent: #f28c28;
+    --brand-success: #2bb673;
+    --brand-background: #f6f5f0;
+    --brand-heading-font: "Bricolage Grotesque";
+    --brand-body-font: "Figtree";
+
+    --ink: #0f172a;
+    --navy: #18181b;
+    --navy-foreground: oklch(0.98 0.005 90);
+    --lake: #0f766e;
+    --sunrise: var(--brand-accent);
+    --sunrise-foreground: oklch(0.22 0.05 50);
+    --success: var(--brand-success);
+    --mist: var(--brand-background);
+    --sky-light: #e0f2fe;
+    --sky-mid: #bae6fd;
+    --border-soft: rgba(255, 255, 255, 0.85);
+
+    --pen-red: oklch(0.56 0.22 27);
+    --pen-green: oklch(0.6 0.16 150);
+
+    --kid-sun: oklch(0.89 0.15 92);
+    --kid-mint: oklch(0.84 0.11 155);
+    --kid-grass: oklch(0.75 0.16 145);
+    --kid-berry: oklch(0.72 0.16 25);
+    --kid-orange: oklch(0.78 0.16 55);
+    --kid-cream: #faf7f0;
+    --kid-ink: #292524;
+
+    --scholar: #1c1917;
+    --scholar-panel: #292524;
+    --scholar-line: #3f3a36;
+    --scholar-gold: #f28c28;
+    --scholar-ink: #fafaf9;
+    --scholar-muted: #a8a29e;
+
+    --font-display: var(--brand-heading-font), "Bricolage Grotesque", system-ui, sans-serif;
+    --font-body: var(--brand-body-font), "Figtree", system-ui, sans-serif;
+    --font-kids: "Baloo 2", "Figtree", ui-rounded, system-ui, sans-serif;
+    --font-serif: "Fraunces", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--ink);
+    background-color: var(--mist);
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  .font-kids {
+    font-family: var(--font-kids);
+  }
+
+  .font-editorial {
+    font-family: var(--font-serif);
+  }
+
+  .font-mono-tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--sunrise) 35%, transparent);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+@utility shadow-lift {
+  box-shadow: var(--shadow-lift);
+}
+
+@utility shadow-glass {
+  box-shadow: var(--shadow-glass);
+}
+
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+@utility shadow-kid {
+  box-shadow: var(--shadow-kid);
+}
+
+/* Light-blue glassmorphism strictly reserved for Header & Footer */
+@utility glass-header-footer {
+  background: linear-gradient(
+    135deg,
+    rgba(224, 242, 254, 0.84) 0%,
+    rgba(186, 230, 253, 0.74) 52%,
+    rgba(224, 242, 254, 0.86) 100%
+  );
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 10px 30px -16px rgba(15, 23, 42, 0.12);
+}
+
+/* Neutral frosted glass surfaces for body cards, forms, and modals */
+@utility glass-card {
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadow-glass);
+}
+
+@utility glass-panel {
+  background: rgba(255, 255, 255, 0.54);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+}
+
+/* Warm-neutral atmospheric mesh canvas so frosted glass has depth without body blue */
+@utility bg-glass-canvas {
+  background-color: #f6f5f0;
+  background-image:
+    radial-gradient(56rem 34rem at 8% 6%, rgba(242, 140, 40, 0.12), transparent 62%),
+    radial-gradient(50rem 32rem at 92% 14%, rgba(43, 182, 115, 0.09), transparent 60%),
+    radial-gradient(48rem 34rem at 52% 62%, rgba(214, 211, 209, 0.24), transparent 65%),
+    radial-gradient(44rem 28rem at 84% 92%, rgba(245, 158, 11, 0.09), transparent 60%);
+}
+
+@utility bg-hero-glow {
+  background:
+    radial-gradient(58rem 30rem at 85% -10%, color-mix(in oklab, var(--sunrise) 18%, transparent), transparent 60%),
+    radial-gradient(50rem 30rem at -10% 110%, rgba(43, 182, 115, 0.12), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(246, 245, 240, 0.45) 100%);
+}
+
+@utility bg-gradient-brand {
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+}
+
+@utility bg-gradient-sunrise {
+  background: linear-gradient(135deg, var(--sunrise), color-mix(in oklab, var(--sunrise) 72%, oklch(0.68 0.2 25)));
+}
+
+@utility bg-dots {
+  background-image: radial-gradient(rgba(24, 24, 27, 0.08) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+@utility bg-kid-pattern {
+  background-color: var(--kid-cream);
+  background-image:
+    radial-gradient(circle at 8% 18%, color-mix(in oklab, var(--kid-sun) 34%, transparent) 0 64px, transparent 65px),
+    radial-gradient(circle at 92% 10%, color-mix(in oklab, var(--kid-mint) 32%, transparent) 0 92px, transparent 93px),
+    radial-gradient(circle at 84% 90%, color-mix(in oklab, var(--kid-berry) 16%, transparent) 0 74px, transparent 75px);
+}
+
+@utility bg-scholar-grid {
+  background-color: var(--scholar);
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--scholar-line) 42%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--scholar-line) 42%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes kwan-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-kwan-marquee {
+  display: flex;
+  width: max-content;
+  animation: kwan-marquee 42s linear infinite;
+  will-change: transform;
+}
+
+.kwan-marquee-container:hover .animate-kwan-marquee {
+  animation-play-state: paused;
+}
+
+@keyframes kwan-slide-text {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-kwan-slide-text {
+  animation: kwan-slide-text 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

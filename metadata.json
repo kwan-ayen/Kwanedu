@@ -1,0 +1,8 @@
+{
+  "name": "KWAN Education Platform",
+  "description": "Unified Ugandan academic learning platform with distinct Primary (P.4–P.7), Lower Secondary (S.1–S.4), and Upper Secondary (S.5–S.6) environments, central administration, and CMS website designer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

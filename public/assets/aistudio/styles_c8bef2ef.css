@@ -1,0 +1,265 @@
+/*
+ * KWAN design system — "Lake Blue & Sunrise".
+ * Keep every @import at the top. Web fonts load via <link> in src/routes/__root.tsx.
+ * Admin-editable brand colours/fonts override --brand-* variables at runtime (see SiteTheme).
+ */
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-display: var(--brand-heading-font), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--brand-body-font), "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-kids: "Baloo 2", "Figtree", ui-rounded, system-ui, sans-serif;
+  --font-serif: "Fraunces", Georgia, serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 14px);
+  --radius-4xl: calc(var(--radius) + 22px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+
+  /* Brand */
+  --color-navy: var(--navy);
+  --color-navy-foreground: var(--navy-foreground);
+  --color-lake: var(--lake);
+  --color-sunrise: var(--sunrise);
+  --color-sunrise-foreground: var(--sunrise-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-mist: var(--mist);
+  --color-warning: var(--warning);
+
+  /* Marking pens */
+  --color-pen-red: var(--pen-red);
+  --color-pen-green: var(--pen-green);
+
+  /* Primary (kids) environment */
+  --color-kid-sun: var(--kid-sun);
+  --color-kid-sky: var(--kid-sky);
+  --color-kid-grass: var(--kid-grass);
+  --color-kid-berry: var(--kid-berry);
+  --color-kid-orange: var(--kid-orange);
+  --color-kid-cream: var(--kid-cream);
+  --color-kid-ink: var(--kid-ink);
+
+  /* Upper secondary environment */
+  --color-scholar: var(--scholar);
+  --color-scholar-panel: var(--scholar-panel);
+  --color-scholar-line: var(--scholar-line);
+  --color-scholar-gold: var(--scholar-gold);
+  --color-scholar-ink: var(--scholar-ink);
+  --color-scholar-muted: var(--scholar-muted);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-soft: 0 1px 2px color-mix(in oklab, var(--navy) 6%, transparent), 0 8px 24px -12px color-mix(in oklab, var(--navy) 18%, transparent);
+  --shadow-lift: 0 2px 4px color-mix(in oklab, var(--navy) 6%, transparent), 0 24px 48px -20px color-mix(in oklab, var(--navy) 35%, transparent);
+  --shadow-glow: 0 18px 40px -14px color-mix(in oklab, var(--sunrise) 60%, transparent);
+  --shadow-kid: 0 6px 0 0 color-mix(in oklab, var(--kid-ink) 18%, transparent);
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-rise: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-pop: pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+  --animate-marquee: marquee 30s linear infinite;
+}
+
+@keyframes float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
+@keyframes rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: none } }
+@keyframes pop { from { opacity: 0; transform: scale(0.85) } to { opacity: 1; transform: none } }
+@keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+
+:root {
+  /* Admin-editable (defaults) */
+  --brand-primary: #13568c;
+  --brand-navy: #0b2545;
+  --brand-accent: #f28c28;
+  --brand-success: #2bb673;
+  --brand-background: #f4f7fb;
+  --brand-heading-font: "Bricolage Grotesque";
+  --brand-body-font: "Figtree";
+  --radius: 0.9rem;
+
+  --navy: var(--brand-navy);
+  --navy-foreground: oklch(0.98 0.005 250);
+  --lake: var(--brand-primary);
+  --sunrise: var(--brand-accent);
+  --sunrise-foreground: oklch(0.22 0.05 50);
+  --success: var(--brand-success);
+  --success-foreground: oklch(0.99 0 0);
+  --mist: var(--brand-background);
+  --warning: oklch(0.82 0.16 85);
+
+  --background: var(--brand-background);
+  --foreground: oklch(0.24 0.06 255);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.24 0.06 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.24 0.06 255);
+  --primary: var(--brand-primary);
+  --primary-foreground: oklch(0.99 0.003 250);
+  --secondary: oklch(0.94 0.02 250);
+  --secondary-foreground: oklch(0.3 0.08 255);
+  --muted: oklch(0.95 0.012 250);
+  --muted-foreground: oklch(0.5 0.04 255);
+  --accent: color-mix(in oklab, var(--brand-accent) 16%, white);
+  --accent-foreground: oklch(0.38 0.11 50);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.9 0.015 250);
+  --input: oklch(0.88 0.018 250);
+  --ring: var(--brand-primary);
+
+  --pen-red: oklch(0.56 0.22 27);
+  --pen-green: oklch(0.6 0.16 150);
+
+  --kid-sun: oklch(0.87 0.16 90);
+  --kid-sky: oklch(0.74 0.13 230);
+  --kid-grass: oklch(0.75 0.17 145);
+  --kid-berry: oklch(0.68 0.2 0);
+  --kid-orange: oklch(0.76 0.17 55);
+  --kid-cream: oklch(0.985 0.025 90);
+  --kid-ink: oklch(0.3 0.08 265);
+
+  --scholar: oklch(0.2 0.045 258);
+  --scholar-panel: oklch(0.25 0.05 258);
+  --scholar-line: oklch(0.34 0.05 258);
+  --scholar-gold: oklch(0.8 0.13 75);
+  --scholar-ink: oklch(0.96 0.01 250);
+  --scholar-muted: oklch(0.72 0.03 255);
+
+  --chart-1: var(--brand-primary);
+  --chart-2: var(--brand-accent);
+  --chart-3: var(--brand-success);
+  --chart-4: oklch(0.7 0.12 230);
+  --chart-5: var(--brand-navy);
+
+  --sidebar: var(--brand-navy);
+  --sidebar-foreground: oklch(0.9 0.02 250);
+  --sidebar-primary: var(--brand-accent);
+  --sidebar-primary-foreground: oklch(0.2 0.05 50);
+  --sidebar-accent: color-mix(in oklab, white 9%, var(--brand-navy));
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: color-mix(in oklab, white 10%, var(--brand-navy));
+  --sidebar-ring: var(--brand-accent);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
+  ::selection { background: color-mix(in oklab, var(--sunrise) 35%, transparent); }
+}
+
+@utility container-page {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (min-width: 768px) { padding-inline: 2rem; }
+}
+
+@utility bg-hero-glow {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, color-mix(in oklab, var(--sunrise) 28%, transparent), transparent 60%),
+    radial-gradient(50rem 30rem at -10% 110%, color-mix(in oklab, var(--lake) 35%, transparent), transparent 60%),
+    var(--navy);
+}
+
+@utility bg-gradient-brand {
+  background: linear-gradient(135deg, var(--lake), var(--navy));
+}
+
+@utility bg-gradient-sunrise {
+  background: linear-gradient(135deg, var(--sunrise), color-mix(in oklab, var(--sunrise) 70%, oklch(0.7 0.2 20)));
+}
+
+@utility bg-dots {
+  background-image: radial-gradient(color-mix(in oklab, var(--lake) 18%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+@utility bg-kid-pattern {
+  background-color: var(--kid-cream);
+  background-image:
+    radial-gradient(circle at 10% 20%, color-mix(in oklab, var(--kid-sun) 35%, transparent) 0 60px, transparent 61px),
+    radial-gradient(circle at 90% 10%, color-mix(in oklab, var(--kid-sky) 30%, transparent) 0 90px, transparent 91px),
+    radial-gradient(circle at 80% 90%, color-mix(in oklab, var(--kid-berry) 18%, transparent) 0 70px, transparent 71px);
+  background-attachment: fixed;
+}
+
+@utility bg-scholar-grid {
+  background-color: var(--scholar);
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--scholar-line) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--scholar-line) 45%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@utility text-balance { text-wrap: balance; }
+
+@utility prose-kwan {
+  line-height: 1.75;
+  & h1, & h2, & h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.2; margin-top: 1.6em; margin-bottom: 0.6em; }
+  & h2 { font-size: 1.5rem; }
+  & h3 { font-size: 1.2rem; }
+  & p { margin: 0.9em 0; }
+  & ul { list-style: disc; padding-left: 1.4em; margin: 0.8em 0; }
+  & ol { list-style: decimal; padding-left: 1.4em; margin: 0.8em 0; }
+  & li { margin: 0.3em 0; }
+  & strong { font-weight: 700; color: inherit; }
+  & a { color: var(--lake); text-decoration: underline; text-underline-offset: 3px; }
+  & table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.95em; }
+  & th, & td { border: 1px solid var(--border); padding: 0.5em 0.75em; text-align: left; }
+  & th { background: var(--muted); font-weight: 600; }
+  & blockquote { border-left: 4px solid var(--sunrise); padding-left: 1em; font-style: italic; }
+  & code { background: var(--muted); padding: 0.1em 0.35em; border-radius: 4px; }
+  & > :first-child { margin-top: 0; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
