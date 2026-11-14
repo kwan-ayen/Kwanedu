@@ -54,7 +54,7 @@ The app is built with React + Vite on the frontend and an Express API with a loc
 
 Before you begin, make sure you have:
 
-- Node.js 18+ or newer
+- Node.js 24+
 - npm 9+
 
 ## Installation

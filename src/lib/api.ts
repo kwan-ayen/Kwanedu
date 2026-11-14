@@ -117,6 +117,22 @@ export function formatUGX(amount: number): string {
   return `UGX ${amount.toLocaleString('en-UG')}`;
 }
 
+async function readJson<T>(response: Response, endpoint: string): Promise<T> {
+  const contentType = response.headers.get('content-type')?.toLowerCase() || '';
+  if (!contentType.includes('json')) {
+    throw new Error(
+      `The API at ${endpoint} returned a non-JSON response (HTTP ${response.status}). ` +
+        'Deploy the Node.js app with "npm start"; static hosting alone does not serve the API.'
+    );
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error(`The API at ${endpoint} returned invalid JSON (HTTP ${response.status}).`);
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = sessionStorage.getItem('kwan_session_token');
   const res = await fetch(url, {
@@ -127,7 +143,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
-  const data = await res.json();
+  const data = await readJson<{ error?: string } & T>(res, url);
   if (!res.ok) {
     throw new Error(data.error || 'Request failed');
   }
@@ -140,7 +156,7 @@ async function fetchResourceFile(resourceId: string): Promise<{ blob: Blob; file
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {
-    const data = (await response.json()) as { error?: string };
+    const data = await readJson<{ error?: string }>(response, `/api/resources/${resourceId}/file`);
     throw new Error(data.error || 'Unable to retrieve this resource file.');
   }
   const encodedName = response.headers.get('X-Resource-Filename');

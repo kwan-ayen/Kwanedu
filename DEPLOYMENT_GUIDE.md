@@ -134,3 +134,7 @@ Check that the service can write to `data/resource-files/`, that the file is a s
 ### API health check fails
 
 Check startup logs for a missing build, invalid environment, or port binding issue. Confirm that the build command completed successfully and that the host provides `PORT`.
+
+### The page reports `Unexpected token 'T'` while loading the platform
+
+The frontend received a text or HTML response instead of JSON from `/api/state`. Deploy this as a Node.js service using `npm start` with Node.js 24+ and `NODE_ENV=production`; a static-only deployment of `dist/` cannot serve the API. Verify that `https://<your-domain>/api/health` returns `{"ok":true}`.
