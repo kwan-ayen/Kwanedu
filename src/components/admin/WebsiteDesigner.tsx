@@ -176,14 +176,6 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
     updateSection(sectionId, { slides: copy });
   };
 
-  const readFileAsDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(new Error('Failed to read selected image file.'));
-      reader.readAsDataURL(file);
-    });
-
   const handleUploadBannerFile = async (file: File, targetSlideId?: string) => {
     setErrorMessage('');
     if (!file.type.startsWith('image/')) {
@@ -197,11 +189,10 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
 
     setUploadingBanner(true);
     try {
-      const dataUrl = await readFileAsDataUrl(file);
       const customLabel = bannerLabelInput.trim() || file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
       const res = await api.uploadCmsBanner({
         filename: file.name,
-        dataUrl,
+        file,
         label: customLabel,
         uploadedBy: adminName,
       });
@@ -800,7 +791,7 @@ export function WebsiteDesigner({ state, adminName, onStateChange }: WebsiteDesi
                     </p>
                     <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
                       {mediaLibrary.map((asset) => {
-                        const isUploaded = asset.url.startsWith('/uploads/');
+                        const isUploaded = !asset.url.startsWith('/src/assets/');
                         return (
                           <div
                             key={asset.id}

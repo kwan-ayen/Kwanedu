@@ -1,3 +1,4 @@
+import { upload } from '@vercel/blob/client';
 import type {
   BlogPost,
   ClassLevel,
@@ -112,6 +113,97 @@ export const SUBJECT_COMBINATIONS = [
   ...UPPER_SECONDARY_COMBINATIONS.Arts.map((c) => c.label),
 ];
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const USE_VERCEL_BLOB_UPLOADS = import.meta.env.VITE_BLOB_CLIENT_UPLOADS === 'true';
+const RESOURCE_UPLOAD_MIME_TYPES: Record<string, string> = {
+  csv: 'text/csv',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  odt: 'application/vnd.oasis.opendocument.text',
+  odp: 'application/vnd.oasis.opendocument.presentation',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  pdf: 'application/pdf',
+  png: 'image/png',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  rtf: 'application/rtf',
+  txt: 'text/plain',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+const CMS_UPLOAD_MIME_TYPES: Record<string, string> = {
+  gif: 'image/gif',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+};
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read the selected file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadToVercelBlob(file: File, purpose: 'cms' | 'resource'): Promise<string> {
+  const token = sessionStorage.getItem('kwan_session_token');
+  if (!token) throw new Error('Sign in as an administrator before uploading files.');
+
+  const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!extension) throw new Error('The selected file needs a supported extension.');
+  const contentType =
+    (purpose === 'resource' ? RESOURCE_UPLOAD_MIME_TYPES : CMS_UPLOAD_MIME_TYPES)[extension];
+  if (!contentType) throw new Error('The selected file type is not supported.');
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const pathname =
+    purpose === 'resource'
+      ? `resource-files/${id}`
+      : `cms-banners/${Date.now()}-${id}.${extension}`;
+  const blob = await upload(pathname, file, {
+    access: purpose === 'resource' ? 'private' : 'public',
+    contentType,
+    handleUploadUrl: apiUrl('/api/blob-upload'),
+    headers: { Authorization: `Bearer ${token}` },
+    clientPayload: purpose,
+    multipart: file.size > 5 * 1024 * 1024,
+  });
+  return blob.pathname;
+}
+
+type ResourceWritePayload = Partial<ResourceItem> & {
+  attachmentDataUrl?: string;
+  attachmentFileName?: string;
+  attachmentFile?: File;
+  removeAttachment?: boolean;
+};
+
+async function prepareResourcePayload(payload: ResourceWritePayload) {
+  const { attachmentFile, ...rest } = payload;
+  if (!attachmentFile) return rest;
+  if (USE_VERCEL_BLOB_UPLOADS) {
+    return {
+      ...rest,
+      attachmentFileName: attachmentFile.name,
+      attachmentBlobPath: await uploadToVercelBlob(attachmentFile, 'resource'),
+    };
+  }
+  return {
+    ...rest,
+    attachmentFileName: attachmentFile.name,
+    attachmentDataUrl: await readFileAsDataUrl(attachmentFile),
+  };
+}
+
 export function formatUGX(amount: number): string {
   if (!amount || amount <= 0) return 'Free';
   return `UGX ${amount.toLocaleString('en-UG')}`;
@@ -135,7 +227,7 @@ async function readJson<T>(response: Response, endpoint: string): Promise<T> {
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = sessionStorage.getItem('kwan_session_token');
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -152,11 +244,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 async function fetchResourceFile(resourceId: string): Promise<{ blob: Blob; fileName: string }> {
   const token = sessionStorage.getItem('kwan_session_token');
-  const response = await fetch(`/api/resources/${encodeURIComponent(resourceId)}/file`, {
+  const endpoint = `/api/resources/${encodeURIComponent(resourceId)}/file`;
+  const response = await fetch(apiUrl(endpoint), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {
-    const data = await readJson<{ error?: string }>(response, `/api/resources/${resourceId}/file`);
+    const data = await readJson<{ error?: string }>(response, endpoint);
     throw new Error(data.error || 'Unable to retrieve this resource file.');
   }
   const encodedName = response.headers.get('X-Resource-Filename');
@@ -275,27 +368,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ authorName, text }),
     }),
-  createResource: (
-    payload: Partial<ResourceItem> & {
-      attachmentDataUrl?: string;
-      attachmentFileName?: string;
-    }
-  ) =>
+  createResource: async (payload: ResourceWritePayload) =>
     request<{ state: PlatformState }>('/api/resources', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(await prepareResourcePayload(payload)),
     }),
-  updateResource: (
-    id: string,
-    payload: Partial<ResourceItem> & {
-      attachmentDataUrl?: string;
-      attachmentFileName?: string;
-      removeAttachment?: boolean;
-    }
-  ) =>
+  updateResource: async (id: string, payload: ResourceWritePayload) =>
     request<{ state: PlatformState }>(`/api/resources/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(await prepareResourcePayload(payload)),
     }),
   fetchResourceFile,
   deleteResource: (id: string) =>
@@ -325,11 +406,25 @@ export const api = {
     request<{ state: PlatformState }>(`/api/cms/restore/${versionId}`, {
       method: 'POST',
     }),
-  uploadCmsBanner: (payload: { filename: string; dataUrl: string; label?: string; uploadedBy?: string }) =>
-    request<{ asset: CmsMediaAsset; state: PlatformState }>('/api/cms/upload', {
+  uploadCmsBanner: async (payload: { filename: string; file: File; label?: string; uploadedBy?: string }) => {
+    const body = USE_VERCEL_BLOB_UPLOADS
+      ? {
+          filename: payload.filename,
+          blobPathname: await uploadToVercelBlob(payload.file, 'cms'),
+          label: payload.label,
+          uploadedBy: payload.uploadedBy,
+        }
+      : {
+          filename: payload.filename,
+          dataUrl: await readFileAsDataUrl(payload.file),
+          label: payload.label,
+          uploadedBy: payload.uploadedBy,
+        };
+    return request<{ asset: CmsMediaAsset; state: PlatformState }>('/api/cms/upload', {
       method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
   deleteCmsMedia: (id: string) =>
     request<{ state: PlatformState }>(`/api/cms/media/${id}`, {
       method: 'DELETE',

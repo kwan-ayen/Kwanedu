@@ -1,140 +1,89 @@
 # KWAN Education Platform Deployment Guide
 
-This guide covers deploying the current React/Vite + Express application as one Node.js service. The server serves the production frontend and the `/api` endpoints from the same origin.
+The project deploys as one Vercel application: Vite serves the frontend and a Vercel Function serves the Express API. Platform state is stored in Postgres; resource attachments and CMS images are stored in separate Vercel Blob stores.
 
-## Important production limitations
+## 1. Connect the project to Vercel
 
-Review these limitations before inviting real students or accepting payments:
+1. Import the repository into Vercel and set the project root to the repository root.
+2. Keep the Vite build command (`npm run build`) and output directory (`dist`).
+3. Use Node.js 24 or newer for the function runtime.
+4. Add the storage integrations below before testing the deployed API.
 
-- The application stores its database and uploaded files on local disk. Use a host with a persistent writable volume mounted at `<application-root>/data`.
-- Run one application instance only. The JSON database is not safe for concurrent multi-instance writes, and login sessions are currently stored in server memory.
-- The purchase flow is simulated; it does not collect or verify real payments.
-- Some APIs still need comprehensive authentication and role-based authorization. The current platform state API exposes student and tutor records. Do not use real student data until these gaps are addressed.
-- Resource documents are limited to 20 MB and are stored locally. Production use should add managed object storage, backups, and malware scanning.
+`vercel.json` configures the Vite output and includes the initial seed database in the API Function bundle. The build also copies legacy `/src/assets/...` and `/uploads/...` image paths into the static output.
 
-For a real production launch, first address the security and payment gaps described in [INTEGRATIONS_AND_WEBSITE_ROADMAP.md](./INTEGRATIONS_AND_WEBSITE_ROADMAP.md).
+## 2. Provision persistent storage
 
-## 1. Prepare the deployment
+### Postgres
 
-1. Push the project to a private Git repository.
-2. Choose a Node.js host or container platform that supports a persistent disk. Static-only hosting is not sufficient.
-3. Configure the service to run from the repository root.
-4. Use **Node.js 24.x**. The production start script runs `server.ts` directly using Node's built-in TypeScript support.
-5. Configure a persistent disk mounted at `<application-root>/data`. The service must be able to create and write:
-   - `data/kwan-db.json`
-   - `data/uploads/`
-   - `data/resource-files/`
+From the Vercel project, add a Postgres database through the Vercel Marketplace (for example, Neon). Set `DATABASE_URL` to the provider's pooled connection string. On the first API request, the application creates its state table and imports the bundled `data/kwan-db.json` seed if the table is empty. Later changes are stored in Postgres.
 
-Keep the volume attached to the same service during deployments. A temporary filesystem will lose the database and uploaded files when the instance restarts or is replaced.
+### Vercel Blob
 
-## 2. Configure build and start commands
+Create two Blob stores because Blob access is configured per store:
 
-Set these commands in the hosting service:
+- A **private** store for resource attachments. Set its read/write token as `BLOB_PRIVATE_READ_WRITE_TOKEN`.
+- A **public** store for CMS banner images. Set its read/write token as `BLOB_PUBLIC_READ_WRITE_TOKEN`.
 
-**Build**
+The application requests short-lived client upload tokens from the API; do not expose either store token in a `VITE_` variable.
 
-For Render (this repository includes `bun.lock`), use:
+## 3. Configure environment variables
 
-```bash
-bun install --frozen-lockfile
-bun run lint
-bun run build
-```
-
-For an npm-based host, use `npm ci --legacy-peer-deps --include=dev`, then `npm run lint` and `npm run build`.
-After changing dependencies, regenerate and commit the relevant lockfile (`bun.lock` for Render/Bun) before deploying.
-
-**Start**
-
-```bash
-npm start
-```
-
-Configure `NODE_ENV=production`. The host should provide `PORT`; the server listens on that port and binds to `0.0.0.0`. Do not use `npm run dev` or `npm run preview` as the production server.
-
-Set the service health-check path to:
-
-```text
-/api/health
-```
-
-## 3. Set environment variables
-
-Add environment variables in the hosting provider's secret/configuration settings—not in Git:
+Add these in Vercel Project Settings → Environment Variables. Apply them to Production and Preview as appropriate, then redeploy after changing them.
 
 | Variable | Required | Purpose |
 |---|---:|---|
-| `NODE_ENV` | Yes | Set to `production` so Express serves the built frontend instead of starting Vite. |
-| `ADMIN_SETUP_KEY` | For initial setup | One-time secret authorizing creation of the first admin password. Generate a strong random value, for example with `openssl rand -hex 32`. |
-| `PORT` | Usually provided by host | Listening port. Let the hosting provider set this value. |
+| `DATABASE_URL` | Yes | Pooled Postgres connection string from the database provider. |
+| `SESSION_SECRET` | Yes | Stable random secret used to sign login sessions. Generate with `openssl rand -hex 32`; do not rotate casually because rotation signs users out. |
+| `BLOB_PRIVATE_READ_WRITE_TOKEN` | Yes | Read/write token for the private resource-file store. |
+| `BLOB_PUBLIC_READ_WRITE_TOKEN` | Yes | Read/write token for the public CMS-image store. |
+| `VITE_BLOB_CLIENT_UPLOADS` | Yes | Set to `true` to upload files directly to Blob, avoiding Vercel Function request-size limits. This is a public build-time flag, not a secret. |
+| `NEXT_PUBLIC_SUPABASE_URL` | If using Supabase from the browser | Supabase project URL; public client configuration. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | If using Supabase from the browser | Supabase publishable key; intended for public client use. |
+| `SUPABASE_URL` | If using Supabase server features | Supabase project URL, available only to server code. |
+| `SUPABASE_PUBLISHABLE_KEY` | If using Supabase server features | Supabase publishable key for server-side request handling. |
+| `SUPABASE_SECRET_KEY` | If using Supabase server features | Supabase secret key. Keep server-side only; rotate any key exposed outside Vercel. |
+| `SUPABASE_JWKS_URL` | If validating Supabase JWTs | Public JWKS endpoint for this project. |
+| `ADMIN_SETUP_KEY` | For initial setup | Strong one-time key for creating the first administrator password. Remove it after setup. |
+| `GEMINI_API_KEY` | Optional | Gemini API key for AI features. |
 
-`GEMINI_API_KEY` and `APP_URL` appear as placeholders in `.env.example`, but are not currently read by this repository's server. Do not deploy the example placeholder values as secrets.
+Do not set `VITE_API_BASE_URL` when the frontend and API are deployed together. Keep secrets in Vercel settings, never in the repository or a `VITE_` variable.
+
+The Vite build exposes both `VITE_` and `NEXT_PUBLIC_` variables to browser code. `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are public client configuration; never put service-role/secret keys, database passwords, or Vercel Connect tokens under either prefix. The current server-side app state store still requires `DATABASE_URL`; these Supabase settings alone do not replace it.
 
 ## 4. Deploy and create the administrator password
 
-1. Deploy the service and wait for the `/api/health` check to pass.
-2. Open the public login page:
+1. Deploy from Vercel and check `https://<your-domain>/api/health`; it should return `{"ok":true}`.
+2. Open `https://<your-domain>/?page=login&view=public`.
+3. Use the configured `ADMIN_SETUP_KEY` to create the administrator password.
+4. Remove `ADMIN_SETUP_KEY` from the Vercel environment and redeploy. The setup endpoint is closed after the admin password has been created.
+5. Sign in as `admin@kwan.ac.ug` with the password you created.
 
-   ```text
-   https://<your-domain>/?page=login&view=public
-   ```
+There is no seeded admin password. Do not reuse the setup key as the administrator password.
 
-3. The first-run screen should identify the administrator as **Ayen Geoffrey Alexander** (`admin@kwan.ac.ug`).
-4. Enter the `ADMIN_SETUP_KEY` you configured, then create and confirm a password of at least 12 characters.
-5. Once setup succeeds, remove `ADMIN_SETUP_KEY` from the hosting environment and restart/redeploy the service. The setup endpoint is closed after the admin password has been created.
-6. Sign in with `admin@kwan.ac.ug` and the password you just created.
+## 5. Verify storage and uploads
 
-There is no seeded admin password. Do not reuse the setup key as the admin password.
+- The homepage and `/api/health` load on the same Vercel domain.
+- An administrator can sign in and create a resource with a small supported file.
+- An authorized user can download that file; unauthenticated users cannot access private resource attachments.
+- An administrator can upload and remove a CMS banner.
+- Accounts, settings, and uploaded files remain available after a new deployment.
 
-## 5. Verify the deployment
-
-Check the health endpoint:
-
-```bash
-curl -fsS https://<your-domain>/api/health
-```
-
-It should return:
-
-```json
-{"ok":true}
-```
-
-Then verify in a browser:
-
-- The homepage loads over HTTPS.
-- Login and student registration work.
-- The admin can create a tutor and upload a small PDF resource.
-- A student can preview/download an approved free PDF.
-- A paid resource remains unavailable until the student's account has access.
-- Uploaded data and accounts remain after a service restart.
-
-## 6. Backups and operations
-
-- Back up the entire `data/` directory, not just `kwan-db.json`; resource attachments and CMS media are stored alongside it.
-- Test restoring a backup before relying on it.
-- Restrict access to deployment logs and environment secrets. Never log or commit admin passwords, setup keys, or session tokens.
-- Schedule maintenance windows for deploys while the JSON database is in use, and verify that the persistent disk remains mounted after each release.
-- Expect active sessions to end when the server restarts; users can sign in again.
+The purchase flow is simulated; it does not collect or verify real payments. Review [INTEGRATIONS_AND_WEBSITE_ROADMAP.md](./INTEGRATIONS_AND_WEBSITE_ROADMAP.md) before using the platform with real student data or accepting payments.
 
 ## Troubleshooting
 
-### The first-run setup screen says `ADMIN_SETUP_KEY` is not configured
+### `/api/health` is 404 or returns HTML
 
-Add the key to the service's environment settings and restart the service. For local setup, put it in `.env` (not `.env.example`).
+Confirm the Vercel project root is the repository root and that `api/[...path].ts` and `vercel.json` are included in the deployed commit. Redeploy after changing project settings.
 
-### The app loads but the database resets after redeploy
+### The API says Postgres or `SESSION_SECRET` is not configured
 
-The host is using ephemeral storage or the persistent volume is mounted somewhere other than `<application-root>/data`. Attach the volume at the correct path and restore the latest `data/` backup if required.
+Set `DATABASE_URL` and `SESSION_SECRET` in the Vercel environment used by that deployment, then redeploy.
 
-### Resource uploads fail
+### Blob uploads fail
 
-Check that the service can write to `data/resource-files/`, that the file is a supported document/image type, and that it is no larger than 20 MB. The JSON API request limit is configured for this upload size.
+Check `VITE_BLOB_CLIENT_UPLOADS=true` and confirm each Blob token belongs to the correct store: private for resources, public for CMS images. Because `VITE_` variables are embedded at build time, redeploy after changing the flag.
 
-### API health check fails
+### The platform reports a database connection error
 
-Check startup logs for a missing build, invalid environment, or port binding issue. Confirm that the build command completed successfully and that the host provides `PORT`.
-
-### The page reports `Unexpected token 'T'` while loading the platform
-
-The frontend received a text or HTML response instead of JSON from `/api/state`. Deploy this as a Node.js service using `npm start` with Node.js 24+ and `NODE_ENV=production`; a static-only deployment of `dist/` cannot serve the API. Verify that `https://<your-domain>/api/health` returns `{"ok":true}`.
+Confirm the Marketplace database is connected to this Vercel project and that `DATABASE_URL` is the provider's valid pooled connection string. Review the Function logs for the database error.

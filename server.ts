@@ -3,8 +3,11 @@ import express from 'express';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { getDb, saveDb } from './server/db.ts';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { del, get, head } from '@vercel/blob';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { Readable } from 'node:stream';
+import { databaseMiddleware, getDb, persistDbRequest, saveDb } from './server/db.ts';
 import { hashPassword, verifyPassword } from './server/auth.ts';
 import type {
   BlogPost,
@@ -24,7 +27,33 @@ import type {
 const app = express();
 app.use(express.json({ limit: '30mb' }));
 
-const sessions = new Map<string, string>();
+const corsOrigins = new Set(
+  (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+
+app.use((req, res, next) => {
+  const origin = req.header('Origin');
+  if (!origin || !corsOrigins.has(origin)) {
+    next();
+    return;
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.vary('Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
+const SESSION_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString('hex');
+const SESSION_DURATION_SECONDS = 30 * 24 * 60 * 60;
 
 function stripSensitiveFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripSensitiveFields);
@@ -42,9 +71,29 @@ app.use((_req, res, next) => {
   next();
 });
 
+app.use('/api', (_req, res, next) => {
+  if (process.env.VERCEL === '1' && !process.env.SESSION_SECRET) {
+    res.status(503).json({ error: 'Set SESSION_SECRET in the Vercel project environment.' });
+    return;
+  }
+  next();
+});
+
+app.use('/api', databaseMiddleware);
+
 const UPLOADS_DIR = path.resolve(process.cwd(), 'data/uploads');
 const RESOURCE_FILES_DIR = path.resolve(process.cwd(), 'data/resource-files');
 const MAX_RESOURCE_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_CMS_IMAGE_BYTES = 8 * 1024 * 1024;
+const VERCEL_RUNTIME = process.env.VERCEL === '1';
+const CMS_IMAGE_MIME_TYPES: Record<string, string> = {
+  gif: 'image/gif',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+};
 const RESOURCE_MIME_TYPES: Record<string, string> = {
   '.csv': 'text/csv',
   '.doc': 'application/msword',
@@ -64,12 +113,48 @@ const RESOURCE_MIME_TYPES: Record<string, string> = {
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  if (!VERCEL_RUNTIME) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
 // Ensure generated assets and uploaded CMS promotional banners resolve cleanly in dev and production
 app.use('/src/assets', express.static(path.resolve(process.cwd(), 'src/assets')));
-app.use('/uploads', express.static(UPLOADS_DIR));
+if (!VERCEL_RUNTIME) app.use('/uploads', express.static(UPLOADS_DIR));
+
+function blobToken(access: 'public' | 'private'): string {
+  const token =
+    access === 'public'
+      ? process.env.BLOB_PUBLIC_READ_WRITE_TOKEN
+      : process.env.BLOB_PRIVATE_READ_WRITE_TOKEN;
+  if (!token) {
+    throw new Error(`Configure BLOB_${access.toUpperCase()}_READ_WRITE_TOKEN in Vercel.`);
+  }
+  return token;
+}
+
+function asyncRoute(
+  handler: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<void>
+): express.RequestHandler {
+  return (req, res, next) => {
+    void handler(req, res, next).catch(next);
+  };
+}
+
+function readableFromWeb(stream: ReadableStream<Uint8Array>): Readable {
+  return Readable.from(
+    (async function* () {
+      const reader = stream.getReader();
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) return;
+          yield chunk.value;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    })()
+  );
+}
 
 function nowLabel() {
   return new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -80,28 +165,49 @@ function todayDate() {
 }
 
 function createSession(userId: string): string {
-  const token = randomBytes(32).toString('hex');
-  sessions.set(token, userId);
-  return token;
+  const payload = Buffer.from(
+    JSON.stringify({ userId, expiresAt: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS })
+  ).toString('base64url');
+  const signature = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
 }
 
 function authenticatedUser(req: express.Request, db: ReturnType<typeof getDb>): UserAccount | undefined {
   const token = req.header('authorization')?.replace(/^Bearer\s+/i, '');
-  const userId = token ? sessions.get(token) : undefined;
+  const [payload, signature, extra] = token?.split('.') || [];
+  if (!payload || !signature || extra) return undefined;
+  const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+  const supplied = Buffer.from(signature, 'base64url');
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return undefined;
+
+  let claims: { userId?: unknown; expiresAt?: unknown };
+  try {
+    claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as typeof claims;
+  } catch {
+    return undefined;
+  }
+  const userId =
+    typeof claims.userId === 'string' &&
+    typeof claims.expiresAt === 'number' &&
+    claims.expiresAt > Math.floor(Date.now() / 1000)
+      ? claims.userId
+      : undefined;
   return userId ? db.users.find((user) => user.id === userId) : undefined;
 }
 
 type ResourceWriteBody = Partial<ResourceItem> & {
   attachmentDataUrl?: string;
   attachmentFileName?: string;
+  attachmentBlobPath?: string;
   removeAttachment?: boolean;
 };
 
-function storeResourceAttachment(
+async function storeResourceAttachment(
   fileName: string | undefined,
-  dataUrl: string | undefined
-): { attachment: ResourceAttachment } | { error: string; status: number } {
-  if (typeof fileName !== 'string' || typeof dataUrl !== 'string' || !fileName || !dataUrl) {
+  dataUrl: string | undefined,
+  blobPathname?: string
+): Promise<{ attachment: ResourceAttachment } | { error: string; status: number }> {
+  if (typeof fileName !== 'string' || !fileName) {
     return { error: 'Choose a supported resource file to upload.', status: 400 };
   }
   const safeName = path.basename(fileName.replace(/\\/g, '/')).replace(/[\x00-\x1f\x7f]/g, '').trim();
@@ -114,6 +220,31 @@ function storeResourceAttachment(
     };
   }
 
+  if (VERCEL_RUNTIME) {
+    const pathMatch = blobPathname?.match(/^resource-files\/([a-f0-9]{32})$/);
+    if (!pathMatch) {
+      return { error: 'Upload the resource file to Vercel Blob before saving it.', status: 400 };
+    }
+    const blob = await head(blobPathname!, { token: blobToken('private') });
+    if (blob.size === 0 || blob.size > MAX_RESOURCE_FILE_BYTES) {
+      return { error: 'Resource files must be between 1 byte and 20 MB.', status: 413 };
+    }
+    if (blob.contentType !== mimeType && blob.contentType !== 'application/octet-stream') {
+      return { error: 'The file type does not match its filename.', status: 400 };
+    }
+    return {
+      attachment: {
+        fileId: pathMatch[1],
+        fileName: safeName,
+        mimeType,
+        sizeBytes: blob.size,
+      },
+    };
+  }
+
+  if (typeof dataUrl !== 'string' || !dataUrl) {
+    return { error: 'Choose a supported resource file to upload.', status: 400 };
+  }
   const dataUrlMatch = dataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i);
   if (!dataUrlMatch || dataUrlMatch[2].length % 4 !== 0) {
     return { error: 'The uploaded file data is invalid.', status: 400 };
@@ -149,11 +280,69 @@ function storeResourceAttachment(
   };
 }
 
-function removeResourceAttachment(attachment?: ResourceAttachment) {
+async function removeResourceAttachment(attachment?: ResourceAttachment): Promise<void> {
   if (!attachment || !/^[a-f0-9]{32}$/.test(attachment.fileId)) return;
+  if (VERCEL_RUNTIME) {
+    await del(`resource-files/${attachment.fileId}`, { token: blobToken('private') });
+    return;
+  }
   const filePath = path.join(RESOURCE_FILES_DIR, attachment.fileId);
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
+
+app.post(
+  '/api/blob-upload',
+  asyncRoute(async (req, res) => {
+    const body = req.body as HandleUploadBody;
+    const isCompletion = body?.type === 'blob.upload-completed';
+    const pathname =
+      body?.type === 'blob.upload-completed'
+        ? body.payload.blob.pathname
+        : body?.type === 'blob.generate-client-token'
+        ? body.payload.pathname
+        : undefined;
+    const resourcePath = typeof pathname === 'string' && /^resource-files\/[a-f0-9]{32}$/.test(pathname);
+    const cmsPath = typeof pathname === 'string' && /^cms-banners\/[\w-]+\.(png|jpe?g|webp|gif|svg)$/i.test(pathname);
+    if (!resourcePath && !cmsPath) {
+      res.status(400).json({ error: 'Unsupported upload path.' });
+      return;
+    }
+
+    if (!isCompletion && authenticatedUser(req, getDb())?.role !== 'admin') {
+      res.status(403).json({ error: 'Only an authenticated administrator can upload files.' });
+      return;
+    }
+
+    const access = resourcePath ? 'private' : 'public';
+    const response = await handleUpload({
+      token: blobToken(access),
+      request: req,
+      body,
+      onBeforeGenerateToken: async (requestedPath, clientPayload) => {
+        const isResourceUpload = resourcePath && clientPayload === 'resource';
+        const isCmsUpload = cmsPath && clientPayload === 'cms';
+        if (
+          requestedPath !== pathname ||
+          (!isResourceUpload && !isCmsUpload)
+        ) {
+          throw new Error('The requested upload is not permitted.');
+        }
+        return isResourceUpload
+          ? {
+              allowedContentTypes: [...new Set(Object.values(RESOURCE_MIME_TYPES))],
+              maximumSizeInBytes: MAX_RESOURCE_FILE_BYTES,
+              addRandomSuffix: false,
+            }
+          : {
+              allowedContentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'],
+              maximumSizeInBytes: MAX_CMS_IMAGE_BYTES,
+              addRandomSuffix: false,
+            };
+      },
+    });
+    res.json(response);
+  })
+);
 
 // Get full platform state
 app.get('/api/state', (_req, res) => {
@@ -776,7 +965,7 @@ app.post('/api/blog/:id/comments', (req, res) => {
 });
 
 // Resources Management
-app.post('/api/resources', (req, res) => {
+app.post('/api/resources', asyncRoute(async (req, res) => {
   const db = getDb();
   if (authenticatedUser(req, db)?.role !== 'admin') {
     res.status(403).json({ error: 'Only an authenticated administrator can create resources.' });
@@ -785,6 +974,7 @@ app.post('/api/resources', (req, res) => {
   const {
     attachmentDataUrl,
     attachmentFileName,
+    attachmentBlobPath,
     attachment: _submittedAttachment,
     ...body
   } = req.body as ResourceWriteBody;
@@ -793,8 +983,8 @@ app.post('/api/resources', (req, res) => {
     return;
   }
   let attachment: ResourceAttachment | undefined;
-  if (attachmentDataUrl || attachmentFileName) {
-    const stored = storeResourceAttachment(attachmentFileName, attachmentDataUrl);
+  if (attachmentDataUrl || attachmentFileName || attachmentBlobPath) {
+    const stored = await storeResourceAttachment(attachmentFileName, attachmentDataUrl, attachmentBlobPath);
     if ('error' in stored) {
       res.status(stored.status).json({ error: stored.error });
       return;
@@ -820,9 +1010,9 @@ app.post('/api/resources', (req, res) => {
   db.resources.unshift(item);
   saveDb(db);
   res.status(201).json({ resource: item, state: db });
-});
+}));
 
-app.get('/api/resources/:id/file', (req, res) => {
+app.get('/api/resources/:id/file', asyncRoute(async (req, res) => {
   const db = getDb();
   const resource = db.resources.find((item) => item.id === req.params.id);
   if (!resource?.attachment) {
@@ -849,7 +1039,10 @@ app.get('/api/resources/:id/file', (req, res) => {
     return;
   }
   const filePath = path.join(RESOURCE_FILES_DIR, fileId);
-  if (!fs.existsSync(filePath)) {
+  const blob = VERCEL_RUNTIME
+    ? await get(`resource-files/${fileId}`, { access: 'private', token: blobToken('private') })
+    : undefined;
+  if (VERCEL_RUNTIME ? !blob : !fs.existsSync(filePath)) {
     res.status(404).json({ error: 'Resource file is unavailable.' });
     return;
   }
@@ -865,16 +1058,26 @@ app.get('/api/resources/:id/file', (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   resource.downloads += 1;
   saveDb(db);
+  await persistDbRequest();
 
-  const stream = fs.createReadStream(filePath);
+  let stream: NodeJS.ReadableStream;
+  if (VERCEL_RUNTIME) {
+    if (!blob?.stream) {
+      res.status(404).json({ error: 'Resource file is unavailable.' });
+      return;
+    }
+    stream = readableFromWeb(blob.stream);
+  } else {
+    stream = fs.createReadStream(filePath);
+  }
   stream.on('error', () => {
     if (!res.headersSent) res.status(500).json({ error: 'Unable to read the resource file.' });
     else res.destroy();
   });
   stream.pipe(res);
-});
+}));
 
-app.patch('/api/resources/:id', (req, res) => {
+app.patch('/api/resources/:id', asyncRoute(async (req, res) => {
   const db = getDb();
   if (authenticatedUser(req, db)?.role !== 'admin') {
     res.status(403).json({ error: 'Only an authenticated administrator can update resources.' });
@@ -888,14 +1091,15 @@ app.patch('/api/resources/:id', (req, res) => {
   const {
     attachmentDataUrl,
     attachmentFileName,
+    attachmentBlobPath,
     removeAttachment,
     attachment: _submittedAttachment,
     ...updates
   } = req.body as ResourceWriteBody;
   const previousAttachment = db.resources[idx].attachment;
   let nextAttachment = previousAttachment;
-  if (attachmentDataUrl || attachmentFileName) {
-    const stored = storeResourceAttachment(attachmentFileName, attachmentDataUrl);
+  if (attachmentDataUrl || attachmentFileName || attachmentBlobPath) {
+    const stored = await storeResourceAttachment(attachmentFileName, attachmentDataUrl, attachmentBlobPath);
     if ('error' in stored) {
       res.status(stored.status).json({ error: stored.error });
       return;
@@ -911,12 +1115,13 @@ app.patch('/api/resources/:id', (req, res) => {
   };
   saveDb(db);
   if (previousAttachment && previousAttachment.fileId !== nextAttachment?.fileId) {
-    removeResourceAttachment(previousAttachment);
+    await persistDbRequest();
+    await removeResourceAttachment(previousAttachment);
   }
   res.json({ resource: db.resources[idx], state: db });
-});
+}));
 
-app.delete('/api/resources/:id', (req, res) => {
+app.delete('/api/resources/:id', asyncRoute(async (req, res) => {
   const db = getDb();
   if (authenticatedUser(req, db)?.role !== 'admin') {
     res.status(403).json({ error: 'Only an authenticated administrator can delete resources.' });
@@ -933,9 +1138,10 @@ app.delete('/api/resources/:id', (req, res) => {
     user.purchasedResourceIds = user.purchasedResourceIds.filter((id) => id !== req.params.id);
   }
   saveDb(db);
-  removeResourceAttachment(resourceToDelete?.attachment);
+  await persistDbRequest();
+  await removeResourceAttachment(resourceToDelete?.attachment);
   res.json({ state: db });
-});
+}));
 
 // User / Tutor / Student Management
 app.patch('/api/users/:id', (req, res) => {
@@ -1009,60 +1215,96 @@ app.post('/api/cms/restore/:versionId', (req, res) => {
 });
 
 // Upload Promotional Banner Image to CMS Media Library
-app.post('/api/cms/upload', (req, res) => {
-  const { filename, dataUrl, label, uploadedBy } = req.body as {
+app.post('/api/cms/upload', asyncRoute(async (req, res) => {
+  if (authenticatedUser(req, getDb())?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can upload CMS media.' });
+    return;
+  }
+  const { filename, dataUrl, blobPathname, label, uploadedBy } = req.body as {
     filename?: string;
     dataUrl?: string;
+    blobPathname?: string;
     label?: string;
     uploadedBy?: string;
   };
-  if (!dataUrl || typeof dataUrl !== 'string') {
-    res.status(400).json({ error: 'Image file data is required.' });
+  if (typeof filename !== 'string' || !filename.trim()) {
+    res.status(400).json({ error: 'Choose an image file to upload.' });
     return;
   }
 
-  const match = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,(.+)$/i);
-  if (!match) {
+  const safeFilename = path.basename(filename.replace(/\\/g, '/')).replace(/[\x00-\x1f\x7f]/g, '').trim();
+  const rawExt = path.extname(safeFilename).slice(1).toLowerCase();
+  const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
+  const mimeType = CMS_IMAGE_MIME_TYPES[rawExt];
+  if (!mimeType) {
     res.status(400).json({ error: 'Only PNG, JPG, WEBP, GIF, or SVG image files are supported.' });
     return;
   }
-
-  const rawExt = match[1].toLowerCase();
-  const ext = rawExt === 'jpeg' ? 'jpg' : rawExt === 'svg+xml' ? 'svg' : rawExt;
-  const base64Data = match[2];
-  const buffer = Buffer.from(base64Data, 'base64');
-
-  if (buffer.byteLength > 8 * 1024 * 1024) {
-    res.status(413).json({ error: 'Image exceeds the 8 MB upload limit.' });
-    return;
-  }
-
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  }
-
-  const cleanBase = (filename || 'banner')
+  const cleanBase = safeFilename
     .replace(/\.[^.]+$/, '')
     .replace(/[^a-zA-Z0-9_-]+/g, '_')
     .slice(0, 40) || 'banner';
   const storedName = `banner-${Date.now()}-${cleanBase}.${ext}`;
-  fs.writeFileSync(path.join(UPLOADS_DIR, storedName), buffer);
+  let assetUrl: string;
+  let fileSize: number;
+
+  if (VERCEL_RUNTIME) {
+    if (
+      typeof blobPathname !== 'string' ||
+      !/^cms-banners\/[\w-]+\.(png|jpe?g|webp|gif|svg)$/i.test(blobPathname)
+    ) {
+      res.status(400).json({ error: 'Upload the image to Vercel Blob before saving it.' });
+      return;
+    }
+    const blob = await head(blobPathname, { token: blobToken('public') });
+    if (blob.size === 0 || blob.size > MAX_CMS_IMAGE_BYTES || blob.contentType !== mimeType) {
+      res.status(400).json({ error: 'The uploaded image is invalid or exceeds the 8 MB limit.' });
+      return;
+    }
+    assetUrl = blob.url;
+    fileSize = blob.size;
+  } else {
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      res.status(400).json({ error: 'Image file data is required.' });
+      return;
+    }
+    const match = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,([A-Za-z0-9+/]+={0,2})$/i);
+    if (!match) {
+      res.status(400).json({ error: 'Only PNG, JPG, WEBP, GIF, or SVG image files are supported.' });
+      return;
+    }
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_CMS_IMAGE_BYTES) {
+      res.status(413).json({ error: 'Image must be between 1 byte and 8 MB.' });
+      return;
+    }
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+    fs.writeFileSync(path.join(UPLOADS_DIR, storedName), buffer);
+    assetUrl = `/uploads/${storedName}`;
+    fileSize = buffer.byteLength;
+  }
 
   const db = getDb();
   const asset: CmsMediaAsset = {
     id: `media-${Date.now()}`,
     label: label?.trim() || cleanBase.replace(/_/g, ' '),
-    url: `/uploads/${storedName}`,
+    url: assetUrl,
     uploadedAt: todayDate(),
     uploadedBy: uploadedBy || 'KWAN Administrator',
-    fileSizeKB: Math.max(1, Math.round(buffer.byteLength / 1024)),
+    fileSizeKB: Math.max(1, Math.round(fileSize / 1024)),
   };
   db.cmsMedia = [asset, ...(db.cmsMedia || [])];
   saveDb(db);
   res.status(201).json({ asset, state: db });
-});
+}));
 
-app.delete('/api/cms/media/:id', (req, res) => {
+app.delete('/api/cms/media/:id', asyncRoute(async (req, res) => {
+  if (authenticatedUser(req, getDb())?.role !== 'admin') {
+    res.status(403).json({ error: 'Only an authenticated administrator can delete CMS media.' });
+    return;
+  }
   const db = getDb();
   const target = (db.cmsMedia || []).find((m) => m.id === req.params.id);
   if (!target) {
@@ -1071,14 +1313,16 @@ app.delete('/api/cms/media/:id', (req, res) => {
   }
   if (target.url.startsWith('/uploads/')) {
     const filePath = path.join(UPLOADS_DIR, path.basename(target.url));
-    if (fs.existsSync(filePath)) {
+    if (!VERCEL_RUNTIME && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
+  } else if (VERCEL_RUNTIME && target.url.includes('.public.blob.vercel-storage.com/')) {
+    await del(target.url, { token: blobToken('public') });
   }
   db.cmsMedia = (db.cmsMedia || []).filter((m) => m.id !== req.params.id);
   saveDb(db);
   res.json({ state: db });
-});
+}));
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -1143,4 +1387,17 @@ async function startServer() {
   listenOnPort(preferredPort);
 }
 
-startServer();
+export default app;
+
+if (process.env.VERCEL !== '1') {
+  void startServer();
+}
+
+app.use('/api', (err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('API request failed.', err);
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  res.status(500).json({ error: 'The API request failed. Please try again.' });
+});

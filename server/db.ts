@@ -1,18 +1,160 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { RequestHandler } from 'express';
+import { Pool, type PoolClient } from '@neondatabase/serverless';
 import type { PlatformState } from '../src/types/kwan.ts';
 import { createSeedData } from './seedData.ts';
 import { hashPassword, isPasswordHash } from './auth.ts';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'kwan-db.json');
+const STATE_TABLE = 'kwan_platform_state';
 
 let memoryCache: PlatformState | null = null;
+let pool: Pool | undefined;
+
+interface DatabaseRequestContext {
+  client: PoolClient;
+  state: PlatformState;
+  dirty: boolean;
+  finished: boolean;
+  finalizing?: Promise<void>;
+}
+
+const requestContext = new AsyncLocalStorage<DatabaseRequestContext>();
+
+function isVercelRuntime(): boolean {
+  return process.env.VERCEL === '1';
+}
+
+function getPool(): Pool {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL must be configured for Vercel deployments.');
+  }
+  pool ??= new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 1,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 5_000,
+  });
+  return pool;
+}
+
+async function finalizeRequest(context: DatabaseRequestContext, commit: boolean): Promise<void> {
+  if (context.finalizing) return context.finalizing;
+  if (context.finished) return;
+
+  context.finalizing = (async () => {
+    try {
+      if (commit && context.dirty) {
+        await context.client.query(
+          `INSERT INTO ${STATE_TABLE} (id, state, updated_at)
+           VALUES (1, $1::jsonb, now())
+           ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
+          [JSON.stringify(context.state)]
+        );
+      }
+      await context.client.query(commit ? 'COMMIT' : 'ROLLBACK');
+    } catch (error) {
+      try {
+        await context.client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Unable to roll back the platform state transaction.', rollbackError);
+      }
+      throw error;
+    } finally {
+      context.finished = true;
+      context.client.release();
+    }
+  })();
+  return context.finalizing;
+}
+
+export async function persistDbRequest(): Promise<void> {
+  const context = requestContext.getStore();
+  if (context) await finalizeRequest(context, true);
+}
+
+export const databaseMiddleware: RequestHandler = (req, res, next) => {
+  if (!process.env.DATABASE_URL) {
+    if (isVercelRuntime()) {
+      res.status(503).json({ error: 'Connect a Postgres database and set DATABASE_URL in Vercel.' });
+      return;
+    }
+    next();
+    return;
+  }
+
+  void (async () => {
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(80421377)');
+      await client.query(
+        `CREATE TABLE IF NOT EXISTS ${STATE_TABLE} (
+          id smallint PRIMARY KEY CHECK (id = 1),
+          state jsonb NOT NULL,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )`
+      );
+      const result = await client.query<{ state: PlatformState }>(
+        `SELECT state FROM ${STATE_TABLE} WHERE id = 1 FOR UPDATE`
+      );
+      const context: DatabaseRequestContext = {
+        client,
+        state: result.rows[0]?.state ?? getDb(),
+        dirty: result.rows.length === 0,
+        finished: false,
+      };
+
+      requestContext.run(context, () => {
+        const json = res.json.bind(res);
+        let responseStarted = false;
+        res.json = ((body: unknown) => {
+          if (responseStarted) return res;
+          responseStarted = true;
+          void finalizeRequest(context, res.statusCode < 400)
+            .then(() => json(body))
+            .catch((error: unknown) => {
+              console.error('Unable to persist platform state.', error);
+              if (!res.headersSent) {
+                res.status(500);
+                json({ error: 'Unable to persist platform state. Please try again.' });
+              } else {
+                res.destroy(error instanceof Error ? error : new Error(String(error)));
+              }
+            });
+          return res;
+        }) as typeof res.json;
+
+        res.once('close', () => {
+          if (!context.finished && !responseStarted) {
+            void finalizeRequest(context, false).catch((error: unknown) => {
+              console.error('Unable to release the platform state transaction.', error);
+            });
+          }
+        });
+        next();
+      });
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Unable to roll back a failed platform state request.', rollbackError);
+      }
+      client.release();
+      next(error);
+    }
+  })().catch(next);
+};
 
 export function getDb(): PlatformState {
+  const context = requestContext.getStore();
+  if (context) return context.state;
   if (memoryCache) return memoryCache;
 
-  if (!fs.existsSync(DATA_DIR)) {
+  if (!isVercelRuntime() && !fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
@@ -163,10 +305,18 @@ export function getDb(): PlatformState {
 }
 
 export function saveDb(next: PlatformState): PlatformState {
+  const context = requestContext.getStore();
+  if (context) {
+    context.state = next;
+    context.dirty = true;
+    return next;
+  }
+
+  memoryCache = next;
+  if (isVercelRuntime()) return next;
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-  memoryCache = next;
   fs.writeFileSync(DB_PATH, JSON.stringify(next, null, 2), 'utf-8');
   return memoryCache;
 }

@@ -83,18 +83,6 @@ const BLOG_CATEGORIES: BlogCategory[] = [
 
 const RESOURCE_FILE_ACCEPT = '.csv,.doc,.docx,.jpeg,.jpg,.odt,.odp,.ods,.pdf,.png,.ppt,.pptx,.rtf,.txt,.xls,.xlsx';
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') resolve(reader.result);
-      else reject(new Error('Unable to read the selected file.'));
-    };
-    reader.onerror = () => reject(new Error('Unable to read the selected file.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatFileSize(sizeBytes: number): string {
   return sizeBytes >= 1024 * 1024
     ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
@@ -261,8 +249,7 @@ export function AdminDashboard({
     try {
       const attachmentFields = resFile
         ? {
-            attachmentDataUrl: await readFileAsDataUrl(resFile),
-            attachmentFileName: resFile.name,
+            attachmentFile: resFile,
           }
         : editingResourceId && removeResAttachment
         ? { removeAttachment: true }
