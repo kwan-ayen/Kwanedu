@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import type { DivisionId, PlatformState, PublicPageId, UserAccount } from './types/kwan';
 import { api } from './lib/api';
 
@@ -84,17 +85,25 @@ export default function App() {
   }, []);
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <LoadingScreen />
+        <Analytics />
+      </>
+    );
   }
 
   if (error || !state) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="bg-white border border-red-200 rounded-xl p-6 max-w-md text-center space-y-2">
-          <h1 className="text-lg font-bold text-slate-900">Unable to Load Platform</h1>
-          <p className="text-xs text-red-700">{error || 'Missing platform state'}</p>
+      <>
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+          <div className="bg-white border border-red-200 rounded-xl p-6 max-w-md text-center space-y-2">
+            <h1 className="text-lg font-bold text-slate-900">Unable to Load Platform</h1>
+            <p className="text-xs text-red-700">{error || 'Missing platform state'}</p>
+          </div>
         </div>
-      </div>
+        <Analytics />
+      </>
     );
   }
 
@@ -113,7 +122,9 @@ export default function App() {
     const sampleLearner =
       state.users.find((u) => u.role === 'student' && u.division === adminPreviewDivision) || currentUser;
     return (
-      <div>
+      <>
+        <Analytics />
+        <div>
         <div className="bg-slate-950 text-white px-6 py-2.5 flex items-center justify-between gap-4 text-xs">
           <span>
             Administrator Preview Mode — Inspecting <strong>{adminPreviewDivision.replace('_', ' ')}</strong>{' '}
@@ -156,7 +167,8 @@ export default function App() {
           />
         )}
         </Suspense>
-      </div>
+        </div>
+      </>
     );
   }
 
@@ -164,7 +176,9 @@ export default function App() {
   if (currentUser && !showPublicWhileSignedIn) {
     if (currentUser.role === 'admin') {
       return (
-        <div>
+        <>
+          <Analytics />
+          <div>
           <Suspense fallback={<LoadingScreen />}>
             <AdminDashboard
               state={state}
@@ -182,20 +196,24 @@ export default function App() {
               View Live Website
             </a>
           </div>
-        </div>
+          </div>
+        </>
       );
     }
 
     if (currentUser.role === 'tutor') {
       return (
-        <Suspense fallback={<LoadingScreen />}>
+        <>
+          <Analytics />
+          <Suspense fallback={<LoadingScreen />}>
           <TutorWorkspace
             state={state}
             user={currentUser}
             onStateChange={(next) => handleStateUpdate(next)}
             onLogout={signOut}
           />
-        </Suspense>
+          </Suspense>
+        </>
       );
     }
 
@@ -213,6 +231,7 @@ export default function App() {
     if (currentUser.division === 'primary') {
       return (
         <>
+          <Analytics />
           <Suspense fallback={<LoadingScreen />}>
             <PrimaryEnvironment
               state={state}
@@ -229,6 +248,7 @@ export default function App() {
     if (currentUser.division === 'lower_secondary') {
       return (
         <>
+          <Analytics />
           <Suspense fallback={<LoadingScreen />}>
             <LowerSecondaryEnvironment
               state={state}
@@ -244,6 +264,7 @@ export default function App() {
 
     return (
       <>
+        <Analytics />
         <Suspense fallback={<LoadingScreen />}>
           <UpperSecondaryEnvironment
             state={state}
@@ -258,7 +279,9 @@ export default function App() {
   }
 
   return (
-    <Suspense fallback={<LoadingScreen />}>
+    <>
+      <Analytics />
+      <Suspense fallback={<LoadingScreen />}>
       <PublicWebsite
         state={state}
         activePage={publicPage}
@@ -276,6 +299,7 @@ export default function App() {
         onReturnToWorkspace={() => setShowPublicWhileSignedIn(false)}
         onStateChange={(next) => setState(next)}
       />
-    </Suspense>
+      </Suspense>
+    </>
   );
 }
